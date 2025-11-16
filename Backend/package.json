@@ -9,12 +9,14 @@
     "start": "node src/server.js"
   },
   "dependencies": {
+    "@aws-sdk/client-cognito-identity-provider": "^3.645.0",
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.5",
     "dotenv": "^16.6.1",
     "express": "^4.21.2",
     "joi": "^17.13.3",
     "jsonwebtoken": "^9.0.2",
+    "jwk-to-pem": "^2.0.5",
     "mssql": "^10.0.4"
   },
   "devDependencies": {

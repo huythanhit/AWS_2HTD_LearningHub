@@ -1,6 +1,7 @@
 // src/services/auth.service.js
+// Business logic cho auth, dùng AWS Cognito + SQL Server
+
 import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
 import dotenv from 'dotenv';
 import {
   findUserByEmail,
@@ -8,21 +9,19 @@ import {
   findUserByIdWithProfile
 } from '../models/user.model.js';
 
+import {
+  cognitoClient,
+  COGNITO_CLIENT_ID
+} from '../config/cognito.js';
+
+import {
+  SignUpCommand,
+  InitiateAuthCommand
+} from '@aws-sdk/client-cognito-identity-provider';
+
 dotenv.config();
 
-function signToken(user) {
-  return jwt.sign(
-    {
-      sub: user.id,
-      email: user.email,
-      role_id: user.role_id
-    },
-    process.env.JWT_SECRET,
-    { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
-  );
-}
-
-// NOTE: ES MODULE EXPORTS (no module.exports!!)
+// Đăng ký: Cognito SignUp + lưu DB
 export async function register({ email, password, fullName, phone }) {
   const existing = await findUserByEmail(email);
 
@@ -32,16 +31,46 @@ export async function register({ email, password, fullName, phone }) {
     throw err;
   }
 
+  let userSub;
+  try {
+    // Username không được ở dạng email (pool dùng email alias)
+    const username = email.split('@')[0] + '_' + Date.now();
+
+    const userAttributes = [
+      { Name: 'email', Value: email },
+      { Name: 'phone_number', Value: phone },
+      { Name: 'family_name', Value: fullName }
+    ];
+
+    const signUpCommand = new SignUpCommand({
+      ClientId: COGNITO_CLIENT_ID,
+      Username: username,
+      Password: password,
+      UserAttributes: userAttributes
+    });
+
+    const response = await cognitoClient.send(signUpCommand);
+    userSub = response.UserSub;
+  } catch (err) {
+    console.error('Cognito SignUp error:', err);
+
+    const e = new Error(
+      `${err.name || 'CognitoError'}: ${err.message || 'Cognito SignUp failed'}`
+    );
+    e.statusCode = 500;
+    e.errors = err;
+    throw e;
+  }
+
   const passwordHash = await bcrypt.hash(password, 10);
 
   const newUser = await createUserWithProfile({
     email,
     passwordHash,
     phone,
-    fullName
+    fullName,
+    cognitoSub: userSub
   });
-
-  const token = signToken(newUser);
 
   return {
     user: {
@@ -50,34 +79,63 @@ export async function register({ email, password, fullName, phone }) {
       role_id: newUser.role_id,
       is_active: newUser.is_active
     },
-    token
+    cognito: {
+      userSub,
+      userConfirmed: false // tuỳ cách bạn confirm email trong pool
+    }
   };
 }
 
+// Đăng nhập: xác thực Cognito, trả về token Cognito + user DB
 export async function login({ email, password }) {
-  const user = await findUserByEmail(email);
+  let authResult;
+  try {
+    const command = new InitiateAuthCommand({
+      AuthFlow: 'USER_PASSWORD_AUTH',
+      ClientId: COGNITO_CLIENT_ID,
+      AuthParameters: {
+        USERNAME: email,      // dùng email để login (alias)
+        PASSWORD: password
+      }
+    });
+
+    const response = await cognitoClient.send(command);
+    authResult = response.AuthenticationResult;
+  } catch (err) {
+    console.error('Cognito login error:', err);
+
+    if (err.name === 'NotAuthorizedException') {
+      const e = new Error('Invalid email or password');
+      e.statusCode = 401;
+      throw e;
+    }
+
+    if (err.name === 'UserNotConfirmedException') {
+      const e = new Error('User not confirmed (please verify email)');
+      e.statusCode = 403;
+      throw e;
+    }
+
+    const e = new Error(`${err.name || 'CognitoError'}: ${err.message || 'Cannot login with Cognito'}`);
+    e.statusCode = 500;
+    e.errors = err;
+    throw e;
+  }
+
+  // Tìm user trong DB để lấy role, profile
+  let user = await findUserByEmail(email);
 
   if (!user) {
-    const err = new Error('Invalid email or password');
-    err.statusCode = 401;
-    throw err;
+    const e = new Error('User not found in local database');
+    e.statusCode = 404;
+    throw e;
   }
 
   if (!user.is_active) {
-    const err = new Error('Account is inactive');
-    err.statusCode = 403;
-    throw err;
+    const e = new Error('Account is inactive');
+    e.statusCode = 403;
+    throw e;
   }
-
-  const isMatch = await bcrypt.compare(password, user.password_hash);
-
-  if (!isMatch) {
-    const err = new Error('Invalid email or password');
-    err.statusCode = 401;
-    throw err;
-  }
-
-  const token = signToken(user);
 
   return {
     user: {
@@ -86,10 +144,17 @@ export async function login({ email, password }) {
       role_id: user.role_id,
       is_active: user.is_active
     },
-    token
+    cognitoTokens: {
+      idToken: authResult.IdToken,
+      accessToken: authResult.AccessToken,
+      refreshToken: authResult.RefreshToken,
+      expiresIn: authResult.ExpiresIn,
+      tokenType: authResult.TokenType
+    }
   };
 }
 
+// Lấy info user từ DB (sau khi đã auth bằng Cognito JWT)
 export async function getCurrentUser(userId) {
   const user = await findUserByIdWithProfile(userId);
 

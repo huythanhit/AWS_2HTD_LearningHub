@@ -1,3 +1,6 @@
+// src/middlewares/error.middleware.js
+// Middleware bắt lỗi chung cho toàn app
+
 import { errorResponse } from '../utils/response.js';
 
 export function errorHandler(err, req, res, next) {
@@ -5,7 +8,7 @@ export function errorHandler(err, req, res, next) {
 
   const statusCode = err.statusCode || 500;
   const message = err.message || 'Internal server error';
-
   const errors = err.errors || undefined;
+
   return errorResponse(res, message, statusCode, errors);
 }

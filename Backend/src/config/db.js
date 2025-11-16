@@ -1,3 +1,6 @@
+// src/config/db.js
+// Cấu hình kết nối SQL Server bằng mssql
+
 import sql from 'mssql';
 import dotenv from 'dotenv';
 
@@ -14,8 +17,8 @@ const dbConfig = {
     idleTimeoutMillis: 30000
   },
   options: {
-    encrypt: false,              
-    trustServerCertificate: true 
+    encrypt: true,               // Khớp với "Encryption: Mandatory" trong SSMS
+    trustServerCertificate: true // Khớp với "Trust server certificate"
   }
 };
 
@@ -33,7 +36,7 @@ const poolConnect = pool
 
 export { sql, pool, poolConnect };
 
-// helper to get a ready-to-use request
+// Helper tạo request mới
 export async function getRequest() {
   await poolConnect;
   return pool.request();

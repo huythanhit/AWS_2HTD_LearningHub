@@ -1,4 +1,6 @@
 // src/controllers/auth.controller.js
+// Nhận request từ router, validate, gọi service và trả response
+
 import { registerSchema, loginSchema } from '../validators/auth.validator.js';
 import { successResponse, errorResponse } from '../utils/response.js';
 import * as authService from '../services/auth.service.js';
@@ -37,9 +39,18 @@ export async function login(req, res, next) {
 
 export async function me(req, res, next) {
   try {
-    const userId = req.user.sub;
+    const userId = req.user.localUserId; // id trong DB, set bởi authMiddleware
     const user = await authService.getCurrentUser(userId);
     return successResponse(res, user, 'User profile', 200);
+  } catch (err) {
+    return next(err);
+  }
+}
+
+// Route debug: trả lại thông tin token Cognito + mapping roles
+export async function debugToken(req, res, next) {
+  try {
+    return successResponse(res, req.user, 'Cognito token info', 200);
   } catch (err) {
     return next(err);
   }

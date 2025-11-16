@@ -1,12 +1,16 @@
+// src/models/user.model.js
+// Các hàm thao tác với bảng users và user_profiles
+
 import { sql, pool, poolConnect } from '../config/db.js';
 
+// Tìm user theo email
 export async function findUserByEmail(email) {
   await poolConnect;
   const request = pool.request();
   request.input('email', sql.NVarChar(255), email);
 
   const result = await request.query(`
-    SELECT TOP 1 id, email, password_hash, role_id, is_active
+    SELECT TOP 1 id, email, password_hash, role_id, is_active, cognito_sub
     FROM users
     WHERE email = @email
   `);
@@ -14,30 +18,44 @@ export async function findUserByEmail(email) {
   return result.recordset[0] || null;
 }
 
-export async function createUserWithProfile({ email, passwordHash, phone, fullName }) {
+// Tạo user + profile, gắn với cognito_sub
+export async function createUserWithProfile({
+  email,
+  passwordHash,
+  phone,
+  fullName,
+  cognitoSub
+}) {
   await poolConnect;
 
   const transaction = new sql.Transaction(pool);
   await transaction.begin();
 
   try {
-    // Insert user
     const userReq = new sql.Request(transaction);
     userReq.input('email', sql.NVarChar(255), email);
-    userReq.input('password_hash', sql.NVarChar(sql.MAX), passwordHash);
+    userReq.input('password_hash', sql.NVarChar(sql.MAX), passwordHash || null);
     userReq.input('phone', sql.NVarChar(50), phone || null);
-    // default role: 2 = Member (the roles seed you showed)
-    userReq.input('role_id', sql.SmallInt, 2);
+    userReq.input('role_id', sql.SmallInt, 2); // 2 = Member
+    userReq.input('cognito_sub', sql.NVarChar(255), cognitoSub || null);
 
     const userResult = await userReq.query(`
-      INSERT INTO users (email, password_hash, phone, role_id)
+      INSERT INTO users (email, password_hash, phone, role_id, cognito_sub)
       OUTPUT inserted.id, inserted.email, inserted.role_id, inserted.is_active
-      VALUES (@email, @password_hash, @phone, @role_id);
+      VALUES (
+        @email,
+        @password_hash,
+        @phone,
+        @role_id,
+        CASE 
+          WHEN @cognito_sub IS NULL THEN CAST(NEWID() AS NVARCHAR(255))
+          ELSE @cognito_sub
+        END
+      );
     `);
 
     const newUser = userResult.recordset[0];
 
-    // Insert profile
     const profileReq = new sql.Request(transaction);
     profileReq.input('user_id', sql.UniqueIdentifier, newUser.id);
     profileReq.input('full_name', sql.NVarChar(255), fullName || null);
@@ -55,6 +73,7 @@ export async function createUserWithProfile({ email, passwordHash, phone, fullNa
   }
 }
 
+// Lấy user + profile theo id
 export async function findUserByIdWithProfile(userId) {
   await poolConnect;
   const request = pool.request();
