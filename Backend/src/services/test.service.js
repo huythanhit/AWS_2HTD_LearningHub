@@ -113,6 +113,7 @@ export async function getTeacherExamDetail(examId) {
 // ============================
 
 // Học sinh bắt đầu làm bài -> tạo submission mới + trả về đề
+// Học sinh bấm Start để bắt đầu làm bài
 export async function startStudentExam(studentId, examId) {
   const exam = await getExamDetail(examId);
   if (!exam) return null;
@@ -124,19 +125,47 @@ export async function startStudentExam(studentId, examId) {
     throw err;
   }
 
+  // Chuyển JSON choices/tags cho từng câu hỏi
   parseExamQuestions(exam);
 
+  // Tạo 1 submission mới (DB tự set started_at = SYSDATETIMEOFFSET())
   const submission = await createSubmission({
     examId,
     userId: studentId,
     autoGraded: true
   });
 
+  // ======= TÍNH THÔNG TIN THỜI GIAN =======
+  const durationMinutes = exam.duration_minutes; // cột trong DB
+  const durationSeconds =
+    typeof durationMinutes === 'number' && durationMinutes > 0
+      ? durationMinutes * 60
+      : null;
+
+  // started_at lấy từ DB
+  let startedAt = submission.started_at;
+  if (startedAt instanceof Date) {
+    startedAt = startedAt.toISOString();
+  } else if (startedAt && typeof startedAt === 'string') {
+    startedAt = new Date(startedAt).toISOString();
+  }
+
+  let expiresAt = null;
+  if (durationSeconds && startedAt) {
+    const startDate = new Date(startedAt);
+    expiresAt = new Date(startDate.getTime() + durationSeconds * 1000).toISOString();
+  }
+
+  // Trả thêm startedAt, durationSeconds, expiresAt cho FE
   return {
     submissionId: submission.id,
-    exam
+    exam,
+    startedAt,       // thời điểm bắt đầu (ISO string)
+    durationSeconds, // tổng số giây được làm
+    expiresAt        // thời điểm hết giờ (ISO string)
   };
 }
+
 
 // ========== Logic chấm điểm từng câu ==========
 
@@ -369,12 +398,45 @@ export async function submitStudentExam(studentId, submissionId, payload) {
     throw err;
   }
 
+  // ========== TÍNH THỜI GIAN ĐÃ LÀM ==========
+  const durationMinutes = exam.duration_minutes; // DB column
+  const timeLimitSeconds =
+    typeof durationMinutes === 'number' && durationMinutes > 0
+      ? durationMinutes * 60
+      : null;
+
+  let elapsedSeconds = 0;
+  let timeoutExceeded = false;
+
+  if (submission.started_at && timeLimitSeconds) {
+    const startedAt =
+      submission.started_at instanceof Date
+        ? submission.started_at
+        : new Date(submission.started_at);
+
+    const now = new Date();
+    elapsedSeconds = Math.max(
+      0,
+      Math.floor((now.getTime() - startedAt.getTime()) / 1000)
+    );
+
+    if (elapsedSeconds > timeLimitSeconds) {
+      timeoutExceeded = true;
+    }
+  }
+
+  // Parse câu hỏi trước khi chấm
   parseExamQuestions(exam);
 
   const { items, totalScore, resultSummary } = gradeStudentAnswers(
     exam,
     payload.answers || []
   );
+
+  // Ghi thêm thông tin thời gian vào resultSummary (sẽ được lưu JSON trong DB)
+  resultSummary.timeLimitSeconds = timeLimitSeconds;
+  resultSummary.elapsedSeconds = elapsedSeconds;
+  resultSummary.timeoutExceeded = timeoutExceeded;
 
   await saveSubmissionGrading({
     submissionId,
