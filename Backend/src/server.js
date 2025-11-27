@@ -4,6 +4,7 @@
 import dotenv from 'dotenv';
 import app from './app.js';
 import { poolConnect } from './config/db.js';
+import { ensureSingleAdmin } from './models/user.model.js';
 
 dotenv.config();
 
@@ -13,6 +14,9 @@ async function startServer() {
   try {
     // Đảm bảo connect DB trước
     await poolConnect;
+
+     // Seed đảm bảo chỉ có 1 Admin
+    await ensureSingleAdmin();
 
     app.listen(PORT, () => {
       console.log(`🚀 Server running on http://localhost:${PORT}`);
