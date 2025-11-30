@@ -1,13 +1,13 @@
 // src/models/user.model.js
 // Các hàm thao tác với bảng users và user_profiles
 
-import { sql, pool, poolConnect } from '../config/db.js';
+import { sql, pool, poolConnect } from "../config/db.js";
 
 // Tìm user theo email
 export async function findUserByEmail(email) {
   await poolConnect;
   const request = pool.request();
-  request.input('email', sql.NVarChar(255), email);
+  request.input("email", sql.NVarChar(255), email);
 
   const result = await request.query(`
     SELECT TOP 1 id, email, password_hash, role_id, is_active, cognito_sub
@@ -24,7 +24,7 @@ export async function createUserWithProfile({
   passwordHash,
   phone,
   fullName,
-  cognitoSub
+  cognitoSub,
 }) {
   await poolConnect;
 
@@ -33,11 +33,11 @@ export async function createUserWithProfile({
 
   try {
     const userReq = new sql.Request(transaction);
-    userReq.input('email', sql.NVarChar(255), email);
-    userReq.input('password_hash', sql.NVarChar(sql.MAX), passwordHash || null);
-    userReq.input('phone', sql.NVarChar(50), phone || null);
-    userReq.input('role_id', sql.SmallInt, 2); // 2 = Member
-    userReq.input('cognito_sub', sql.NVarChar(255), cognitoSub || null);
+    userReq.input("email", sql.NVarChar(255), email);
+    userReq.input("password_hash", sql.NVarChar(sql.MAX), passwordHash || null);
+    userReq.input("phone", sql.NVarChar(50), phone || null);
+    userReq.input("role_id", sql.SmallInt, 2); // 2 = Member
+    userReq.input("cognito_sub", sql.NVarChar(255), cognitoSub || null);
 
     const userResult = await userReq.query(`
       INSERT INTO users (email, password_hash, phone, role_id, cognito_sub)
@@ -57,8 +57,8 @@ export async function createUserWithProfile({
     const newUser = userResult.recordset[0];
 
     const profileReq = new sql.Request(transaction);
-    profileReq.input('user_id', sql.UniqueIdentifier, newUser.id);
-    profileReq.input('full_name', sql.NVarChar(255), fullName || null);
+    profileReq.input("user_id", sql.UniqueIdentifier, newUser.id);
+    profileReq.input("full_name", sql.NVarChar(255), fullName || null);
 
     await profileReq.query(`
       INSERT INTO user_profiles (user_id, full_name)
@@ -77,7 +77,7 @@ export async function createUserWithProfile({
 export async function findUserByIdWithProfile(userId) {
   await poolConnect;
   const request = pool.request();
-  request.input('id', sql.UniqueIdentifier, userId);
+  request.input("id", sql.UniqueIdentifier, userId);
 
   const result = await request.query(`
     SELECT 
@@ -92,7 +92,7 @@ export async function findUserByIdWithProfile(userId) {
     LEFT JOIN user_profiles up ON up.user_id = u.id
     WHERE u.id = @id
   `);
-  
+
   return result.recordset[0] || null;
 }
 
@@ -101,8 +101,8 @@ export async function findUserByIdWithProfile(userId) {
 export async function updateEmailVerified(userId, isVerified) {
   await poolConnect;
   const request = pool.request();
-  request.input('id', sql.UniqueIdentifier, userId);
-  request.input('email_verified', sql.Bit, isVerified ? 1 : 0);
+  request.input("id", sql.UniqueIdentifier, userId);
+  request.input("email_verified", sql.Bit, isVerified ? 1 : 0);
 
   const result = await request.query(`
     UPDATE users
@@ -125,8 +125,8 @@ export async function updateEmailVerified(userId, isVerified) {
 export async function updateUserPasswordHash(userId, passwordHash) {
   await poolConnect;
   const request = pool.request();
-  request.input('id', sql.UniqueIdentifier, userId);
-  request.input('password_hash', sql.NVarChar(sql.MAX), passwordHash);
+  request.input("id", sql.UniqueIdentifier, userId);
+  request.input("password_hash", sql.NVarChar(sql.MAX), passwordHash);
 
   const result = await request.query(`
     UPDATE users
@@ -144,4 +144,3 @@ export async function updateUserPasswordHash(userId, passwordHash) {
 
   return result.recordset[0] || null;
 }
-
