@@ -1,6 +1,6 @@
 // src/middlewares/role.middleware.js
-// Middleware kiểm tra user có thuộc 1 trong các role cho phép không
 
+// Dùng cho route cũ: requireRole('Admin'), requireRole('Admin', 'Teacher')
 export function requireRole(...allowedRoles) {
   return (req, res, next) => {
     if (!req.user || !req.user.roleName) {
@@ -18,4 +18,9 @@ export function requireRole(...allowedRoles) {
     return next();
   };
 }
-//test
+
+// Dùng cho module practice: requireRoles(['Admin','Teacher'])
+export function requireRoles(allowedRoles) {
+  const roles = Array.isArray(allowedRoles) ? allowedRoles : [allowedRoles];
+  return requireRole(...roles);
+}
