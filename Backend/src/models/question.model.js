@@ -78,3 +78,68 @@ export async function getQuestionsByAuthor({
 
   return result.recordset;
 }
+
+// Lấy 1 câu hỏi theo id (dùng cho GV/Admin, không filter author ở đây)
+export async function getQuestionById(id) {
+  await poolConnect;
+  const request = pool.request();
+  request.input('id', sql.UniqueIdentifier, id);
+
+  const result = await request.query(`
+    SELECT *
+    FROM questions
+    WHERE id = @id;
+  `);
+
+  return result.recordset[0];
+}
+
+// Update câu hỏi (title/body/type/choices/difficulty/tags)
+export async function updateQuestionById(id, payload) {
+  await poolConnect;
+  const request = pool.request();
+
+  request.input('id', sql.UniqueIdentifier, id);
+  request.input('title', sql.NVarChar(255), payload.title || null);
+  request.input('body', sql.NVarChar(sql.MAX), payload.body || null);
+  request.input('type', sql.NVarChar(20), payload.type);
+  request.input(
+    'choices',
+    sql.NVarChar(sql.MAX),
+    payload.choicesJson || null
+  );
+  request.input(
+    'difficulty',
+    sql.SmallInt,
+    payload.difficulty ?? null
+  );
+  request.input('tags', sql.NVarChar(sql.MAX), payload.tagsJson || null);
+
+  const result = await request.query(`
+    UPDATE questions
+    SET
+      title = @title,
+      body = @body,
+      type = @type,
+      choices = @choices,
+      difficulty = @difficulty,
+      tags = @tags,
+      updated_at = SYSDATETIMEOFFSET()
+    OUTPUT inserted.*
+    WHERE id = @id;
+  `);
+
+  return result.recordset[0];
+}
+
+// Xoá cứng câu hỏi (basic) – cẩn thận nếu đã gắn vào exam
+export async function deleteQuestionById(id) {
+  await poolConnect;
+  const request = pool.request();
+  request.input('id', sql.UniqueIdentifier, id);
+
+  await request.query(`
+    DELETE FROM questions
+    WHERE id = @id;
+  `);
+}

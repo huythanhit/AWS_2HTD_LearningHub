@@ -1,64 +1,127 @@
-// src/routes/auth.routes.js
+// src/routes/test.routes.js
 
-import express from "express";
-import {
-  register,
-  login,
-  logout,
-  me,
-  debugToken,
-  confirmEmail,
-  resendConfirmCode,
-  forgotPassword,
-  resetPassword,
-} from "../controllers/auth.controller.js";
-import { authMiddleware } from "../middlewares/auth.middleware.js";
+import express from 'express';
+import { authMiddleware } from '../middlewares/auth.middleware.js';
+import { requireRole } from '../middlewares/role.middleware.js';
 
-import {
-  registerSchema,
-  loginSchema,
-} from "../validators/auth.validator.js";
+import * as testController from '../controllers/test.controller.js';
 
 const router = express.Router();
 
-function validateBody(schema) {
-  return (req, res, next) => {
-    const { error, value } = schema.validate(req.body, {
-      abortEarly: false,  
-      stripUnknown: true,  
-    });
-
-    if (error) {
-      return res.status(400).json({
-        message: "Validation error",
-        errors: error.details.map((d) => ({
-          field: d.path.join("."),
-          message: d.message,
-        })),
-      });
-    }
-
-    req.body = value;
-    next();
-  };
+// helper
+function requireAuth(...roles) {
+  return [authMiddleware, requireRole(...roles)];
 }
 
-router.post("/register", validateBody(registerSchema), register);
+// =====================
+// ADMIN / TEACHER
+// =====================
 
-router.post("/login", validateBody(loginSchema), login);
+// CÂU HỎI
+router.post(
+  '/questions',
+  ...requireAuth('Teacher', 'Admin'),
+  testController.createQuestion
+);
 
-router.post("/logout", logout);
+router.get(
+  '/questions',
+  ...requireAuth('Teacher', 'Admin'),
+  testController.listMyQuestions
+);
 
-router.post("/confirm-email", confirmEmail);
+router.get(
+  '/questions/:id',
+  ...requireAuth('Teacher', 'Admin'),
+  testController.getQuestionDetail
+);
 
-router.post("/resend-confirm-code", resendConfirmCode);
+router.put(
+  '/questions/:id',
+  ...requireAuth('Teacher', 'Admin'),
+  testController.updateQuestion
+);
 
-router.post("/forgot-password", forgotPassword);
+router.delete(
+  '/questions/:id',
+  ...requireAuth('Teacher', 'Admin'),
+  testController.deleteQuestion
+);
 
-router.post("/reset-password", resetPassword);
+// ĐỀ THI
+router.post(
+  '/exams',
+  ...requireAuth('Teacher', 'Admin'),
+  testController.createExam
+);
 
-router.get("/me", authMiddleware, me);
+router.get(
+  '/exams',
+  ...requireAuth('Teacher', 'Admin'),
+  testController.listMyExams
+);
 
-router.get("/debug-token", authMiddleware, debugToken);
+router.get(
+  '/exams/:id',
+  ...requireAuth('Teacher', 'Admin'),
+  testController.getExamDetail
+);
+
+router.put(
+  '/exams/:id',
+  ...requireAuth('Teacher', 'Admin'),
+  testController.updateExam
+);
+
+router.patch(
+  '/exams/:id/publish',
+  ...requireAuth('Teacher', 'Admin'),
+  testController.publishExam
+);
+
+router.delete(
+  '/exams/:id',
+  ...requireAuth('Teacher', 'Admin'),
+  testController.deleteExam
+);
+
+// =====================
+// MEMBER
+// =====================
+
+// Bắt đầu làm bài
+router.post(
+  '/exams/:id/start',
+  ...requireAuth('Member'),
+  testController.startExamForStudent
+);
+
+// Nộp bài
+router.post(
+  '/submissions/:id/submit',
+  ...requireAuth('Member'),
+  testController.submitExam
+);
+
+// Lịch sử bài làm của chính mình
+router.get(
+  '/my-submissions',
+  ...requireAuth('Member'),
+  testController.listMySubmissions
+);
+
+// Xem lại bài làm (Member xem bài của mình, GV/Admin xem bài của bất kỳ ai)
+router.get(
+  '/submissions/:id/review',
+  authMiddleware,
+  testController.reviewSubmission
+);
+
+// demo member-test (giữ nếu bạn cần)
+router.get(
+  '/member-test',
+  ...requireAuth('Member'),
+  testController.testMemberAccess
+);
 
 export default router;

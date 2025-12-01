@@ -114,3 +114,85 @@ export async function saveSubmissionGrading({
     throw err;
   }
 }
+
+// Lấy danh sách submission của 1 user (lịch sử làm bài)
+export async function getSubmissionsByUser({ userId, page, pageSize }) {
+  await poolConnect;
+  const request = pool.request();
+
+  const offset = (page - 1) * pageSize;
+
+  request.input('user_id', sql.UniqueIdentifier, userId);
+  request.input('limit', sql.Int, pageSize);
+  request.input('offset', sql.Int, offset);
+
+  const result = await request.query(`
+    SELECT
+      s.id,
+      s.exam_id,
+      s.total_score,
+      s.status,
+      s.started_at,
+      s.submitted_at,
+      s.result,
+      e.title AS exam_title
+    FROM submissions s
+    LEFT JOIN exams e ON e.id = s.exam_id
+    WHERE s.user_id = @user_id
+    ORDER BY s.created_at DESC
+    OFFSET @offset ROWS
+    FETCH NEXT @limit ROWS ONLY;
+  `);
+
+  return result.recordset;
+}
+
+// Lấy full thông tin 1 submission + chi tiết từng câu
+export async function getSubmissionWithDetails(submissionId) {
+  await poolConnect;
+  const request = pool.request();
+  request.input('id', sql.UniqueIdentifier, submissionId);
+
+  // Thông tin submission + exam
+  const subResult = await request.query(`
+    SELECT
+      s.*,
+      e.title AS exam_title,
+      e.passing_score,
+      e.duration_minutes
+    FROM submissions s
+    LEFT JOIN exams e ON e.id = s.exam_id
+    WHERE s.id = @id;
+  `);
+
+  const submission = subResult.recordset[0];
+  if (!submission) return null;
+
+  // Chi tiết từng câu
+  request.input('exam_id', sql.UniqueIdentifier, submission.exam_id);
+
+  const itemsResult = await request.query(`
+    SELECT
+      si.id,
+      si.question_id,
+      si.answer,
+      si.awarded_points,
+      si.graded,
+      q.title,
+      q.body,
+      q.type,
+      q.choices,
+      q.tags,
+      eq.points,
+      eq.sequence
+    FROM submission_items si
+    JOIN questions q ON q.id = si.question_id
+    LEFT JOIN exam_questions eq
+      ON eq.exam_id = @exam_id AND eq.question_id = q.id
+    WHERE si.submission_id = @id
+    ORDER BY eq.sequence ASC;
+  `);
+
+  submission.items = itemsResult.recordset;
+  return submission;
+}

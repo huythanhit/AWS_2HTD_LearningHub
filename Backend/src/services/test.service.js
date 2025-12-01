@@ -3,18 +3,27 @@
 
 import {
   createQuestion,
-  getQuestionsByAuthor
+  getQuestionsByAuthor,
+  getQuestionById,
+  updateQuestionById,
+  deleteQuestionById
 } from '../models/question.model.js';
 
 import {
   createExamWithQuestions,
-  getExamDetail
+  getExamDetail,
+  getExamsByCreator,
+  updateExamWithQuestions,
+  setExamPublished,
+  deleteExamById
 } from '../models/exam.model.js';
 
 import {
   createSubmission,
   getSubmissionById,
-  saveSubmissionGrading
+  saveSubmissionGrading,
+  getSubmissionsByUser,
+  getSubmissionWithDetails
 } from '../models/submission.model.js';
 
 // ============================
@@ -35,8 +44,10 @@ function parseExamQuestions(exam) {
 }
 
 // ============================
-// PHẦN GIÁO VIÊN
+// PHẦN GIÁO VIÊN / ADMIN
 // ============================
+
+// ---------- CÂU HỎI ----------
 
 // Tạo câu hỏi cho giáo viên
 export async function createTeacherQuestion(teacherId, payload) {
@@ -65,7 +76,7 @@ export async function createTeacherQuestion(teacherId, payload) {
   return question;
 }
 
-// Lấy câu hỏi của giáo viên
+// Lấy danh sách câu hỏi của giáo viên
 export async function listTeacherQuestions(
   teacherId,
   { search, type, page, pageSize }
@@ -84,6 +95,61 @@ export async function listTeacherQuestions(
     tags: q.tags ? JSON.parse(q.tags) : null
   }));
 }
+
+// Lấy chi tiết 1 câu hỏi của giáo viên
+export async function getTeacherQuestionDetail(teacherId, questionId) {
+  const question = await getQuestionById(questionId);
+  if (!question) return null;
+
+  // chỉ cho xem câu hỏi của chính mình
+  if (
+    String(question.author_id).toLowerCase() !==
+    String(teacherId).toLowerCase()
+  ) {
+    const err = new Error('You are not allowed to view this question');
+    err.status = 403;
+    throw err;
+  }
+
+  return {
+    ...question,
+    choices: question.choices ? JSON.parse(question.choices) : null,
+    tags: question.tags ? JSON.parse(question.tags) : null
+  };
+}
+
+// Cập nhật câu hỏi
+export async function updateTeacherQuestion(teacherId, questionId, payload) {
+  // Check quyền
+  await getTeacherQuestionDetail(teacherId, questionId);
+
+  const choicesJson = payload.choices
+    ? JSON.stringify(payload.choices)
+    : null;
+  const tagsJson = payload.tags ? JSON.stringify(payload.tags) : null;
+
+  const updated = await updateQuestionById(questionId, {
+    ...payload,
+    choicesJson,
+    tagsJson
+  });
+
+  return {
+    ...updated,
+    choices: updated.choices ? JSON.parse(updated.choices) : null,
+    tags: updated.tags ? JSON.parse(updated.tags) : null
+  };
+}
+
+// Xoá câu hỏi
+export async function deleteTeacherQuestion(teacherId, questionId) {
+  // Check quyền
+  await getTeacherQuestionDetail(teacherId, questionId);
+
+  await deleteQuestionById(questionId);
+}
+
+// ---------- ĐỀ THI ----------
 
 // Tạo bài kiểm tra
 export async function createTeacherExam(teacherId, payload) {
@@ -106,6 +172,95 @@ export async function getTeacherExamDetail(examId) {
   const exam = await getExamDetail(examId);
   if (!exam) return null;
   return parseExamQuestions(exam);
+}
+
+// List đề thi của giáo viên
+export async function listTeacherExams(
+  teacherId,
+  { page, pageSize, search }
+) {
+  const exams = await getExamsByCreator({
+    creatorId: teacherId,
+    page,
+    pageSize,
+    search
+  });
+  return exams;
+}
+
+// Cập nhật đề thi (title, description, duration, list câu hỏi...)
+export async function updateTeacherExam(teacherId, examId, payload) {
+  const exam = await getExamDetail(examId);
+  if (!exam) {
+    const err = new Error('Exam not found');
+    err.status = 404;
+    throw err;
+  }
+
+  if (
+    String(exam.created_by).toLowerCase() !==
+    String(teacherId).toLowerCase()
+  ) {
+    const err = new Error('You are not allowed to update this exam');
+    err.status = 403;
+    throw err;
+  }
+
+  const updated = await updateExamWithQuestions({
+    examId,
+    courseId: payload.courseId || null,
+    title: payload.title,
+    description: payload.description,
+    durationMinutes: payload.durationMinutes,
+    passingScore: payload.passingScore,
+    randomizeQuestions: payload.randomizeQuestions,
+    questions: payload.questions
+  });
+
+  return updated;
+}
+
+// Publish / unpublish đề
+export async function publishTeacherExam(teacherId, examId, published) {
+  const exam = await getExamDetail(examId);
+  if (!exam) {
+    const err = new Error('Exam not found');
+    err.status = 404;
+    throw err;
+  }
+
+  if (
+    String(exam.created_by).toLowerCase() !==
+    String(teacherId).toLowerCase()
+  ) {
+    const err = new Error('You are not allowed to publish this exam');
+    err.status = 403;
+    throw err;
+  }
+
+  const updated = await setExamPublished(examId, published);
+  return updated;
+}
+
+// Xoá đề thi
+export async function deleteTeacherExam(teacherId, examId) {
+  const exam = await getExamDetail(examId);
+  if (!exam) {
+    const err = new Error('Exam not found');
+    err.status = 404;
+    throw err;
+  }
+
+  if (
+    String(exam.created_by).toLowerCase() !==
+    String(teacherId).toLowerCase()
+  ) {
+    const err = new Error('You are not allowed to delete this exam');
+    err.status = 403;
+    throw err;
+  }
+
+  await deleteExamById(examId);
 }
 
 // ============================
@@ -153,19 +308,20 @@ export async function startStudentExam(studentId, examId) {
   let expiresAt = null;
   if (durationSeconds && startedAt) {
     const startDate = new Date(startedAt);
-    expiresAt = new Date(startDate.getTime() + durationSeconds * 1000).toISOString();
+    expiresAt = new Date(
+      startDate.getTime() + durationSeconds * 1000
+    ).toISOString();
   }
 
   // Trả thêm startedAt, durationSeconds, expiresAt cho FE
   return {
     submissionId: submission.id,
     exam,
-    startedAt,       // thời điểm bắt đầu (ISO string)
+    startedAt, // thời điểm bắt đầu (ISO string)
     durationSeconds, // tổng số giây được làm
-    expiresAt        // thời điểm hết giờ (ISO string)
+    expiresAt // thời điểm hết giờ (ISO string)
   };
 }
-
 
 // ========== Logic chấm điểm từng câu ==========
 function gradeSingleQuestion(question, answerPayload, questionPoints) {
@@ -448,5 +604,75 @@ export async function submitStudentExam(studentId, submissionId, payload) {
     submissionId,
     totalScore,
     result: resultSummary
+  };
+}
+
+// ============================
+// LỊCH SỬ & REVIEW CHO HỌC SINH
+// ============================
+
+// Lịch sử bài làm của 1 học sinh
+export async function listStudentSubmissions(studentId, { page, pageSize }) {
+  const rows = await getSubmissionsByUser({
+    userId: studentId,
+    page,
+    pageSize
+  });
+
+  return rows.map((r) => ({
+    submissionId: r.id,
+    examId: r.exam_id,
+    examTitle: r.exam_title,
+    totalScore: Number(r.total_score ?? 0),
+    status: r.status,
+    startedAt: r.started_at,
+    submittedAt: r.submitted_at,
+    summary: r.result ? JSON.parse(r.result) : null
+  }));
+}
+
+// Review chi tiết 1 submission
+export async function getSubmissionReview(submissionId, user) {
+  const submission = await getSubmissionWithDetails(submissionId);
+  if (!submission) return null;
+
+  // Kiểm tra quyền: Member chỉ xem bài của mình.
+  if (user && user.roleName === 'Member') {
+    if (
+      String(submission.user_id).toLowerCase() !==
+      String(user.localUserId).toLowerCase()
+    ) {
+      const err = new Error('You are not allowed to view this submission');
+      err.status = 403;
+      throw err;
+    }
+  }
+  // Admin/Teacher được phép xem tất cả
+
+  const resultSummary = submission.result
+    ? JSON.parse(submission.result)
+    : null;
+
+  const items = (submission.items || []).map((it) => ({
+    questionId: it.question_id,
+    title: it.title,
+    body: it.body,
+    type: it.type,
+    choices: it.choices ? JSON.parse(it.choices) : null,
+    tags: it.tags ? JSON.parse(it.tags) : null,
+    studentAnswer: it.answer ? JSON.parse(it.answer) : null,
+    awardedPoints: Number(it.awarded_points ?? 0),
+    maxPoints: Number(it.points ?? 1),
+    sequence: it.sequence
+  }));
+
+  return {
+    submissionId: submission.id,
+    examId: submission.exam_id,
+    examTitle: submission.exam_title,
+    totalScore: Number(submission.total_score ?? 0),
+    submittedAt: submission.submitted_at,
+    summary: resultSummary,
+    items
   };
 }
