@@ -8,14 +8,20 @@ import React from "react";
 
 const PrivateRoute = ({ children, allowedRoles }) => {
   const token = localStorage.getItem("token");
-  const role = localStorage.getItem("role");
-// chưa login hoặc token không có -> về login
+  const roleName = localStorage.getItem("roleName");
+  const roleId = localStorage.getItem("roleId"); // Thêm vào để lấy roleId
+
+  // Chưa login hoặc token không có
   if (!token) return <Navigate to="/auth/login" replace />;
-// role không hợp lệ -> redirect về login
-  if (allowedRoles && role && !allowedRoles.includes(role)) {
-    return <Navigate to="/auth/login" replace />; 
+  
+  // Kiểm tra nếu không có allowedRoles hoặc role không hợp lệ
+  if (allowedRoles && roleName) {
+      if (!allowedRoles.includes(roleName) && !allowedRoles.includes(roleId)) {
+          return <Navigate to="/auth/login" replace />; 
+      }
   }
-  return children;
+  
+  return children; // Cho phép truy cập nếu tất cả điều kiện đều đúng
 };
 
 export default PrivateRoute;

@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { login } from '../services/authService'; // Thêm dòng nhập này
+
 
 // --- ICONS & ASSETS (Giữ nguyên phần export) ---
 
@@ -42,42 +44,35 @@ export const hoverBg = 'hover:bg-[#7a66d3]';
 
 // --- COMPONENT ---
 export default function LoginPage() {
-    const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
-    const [showPassword, setShowPassword] = useState(false);
-    const navigate = useNavigate();
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
+    const navigate = useNavigate();
 
-    const handleLogin = (e) => {
-        e.preventDefault();
-
-        // Giả lập logic xác định Role
-        let userRole = 'member';
-        let userId = 'MEMBER_101';
-        let userName = 'Member User';
-        let path = '/member';
-
-        if (email.toLowerCase().includes('@admin')) {
-            userRole = 'admin';
-            userId = 'ADMIN_001';
-            userName = 'Admin User';
-            path = '/admin';
-        } else if (email.toLowerCase().includes('@teacher')) {
-            userRole = 'teacher';
-            userId = 'TEACHER_202';
-            userName = 'Teacher User';
-            path = '/teacher';
-        }
-
-        // Lưu vào localStorage
-        localStorage.setItem('token', 'fake-jwt-token-' + userRole);
-        localStorage.setItem('role', userRole);
-        localStorage.setItem('userEmail', email);
-        localStorage.setItem('userId', userId);
-        localStorage.setItem('userName', userName);
-
-        console.log(`Logged in as ${userRole}, redirecting to ${path}`);
-        navigate(path);
-    };
+    const handleLogin = async (e) => {
+        e.preventDefault();
+        try {
+            const response = await login({ email, password });
+            const { token, user } = response;
+    
+            // Lưu thông tin vào localStorage
+            localStorage.setItem('token', token);
+            localStorage.setItem('role', user.role_name); // Lưu vai trò vào localStorage
+            localStorage.setItem('roleId', user.role_id);
+            // Xác định đường dẫn chuyển hướng
+            let path = '/member'; // Đường dẫn mặc định cho member
+            if (user.role_name === 'Admin') {
+                path = '/admin'; // Chuyển hướng nếu là Admin
+            } else if (user.role_name === 'Teacher') {
+                path = '/teacher'; // Chuyển hướng nếu là Teacher
+            }
+        
+            navigate(path); // Thực hiện chuyển hướng
+        } catch (error) {
+            console.error(error.message);
+            alert("Đăng nhập thất bại: " + error.message);
+        }
+    };
 
     return (
         <div className={`min-h-screen flex items-center justify-center p-4 ${lightestBg}`}>

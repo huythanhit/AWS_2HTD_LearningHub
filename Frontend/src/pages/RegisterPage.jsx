@@ -1,6 +1,7 @@
 
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { register } from '../services/authService'; // Nhập hàm register
 
 // --- Icons Components ---
 const EyeIcon = (props) => (
@@ -35,7 +36,7 @@ export default function RegisterPage() {
         confirmPassword: '',
         birthDate: '',
         occupation: 'student',
-        role: 'member'
+        role: 'member',
     });
 
     const [showPassword, setShowPassword] = useState(false);
@@ -43,10 +44,11 @@ export default function RegisterPage() {
 
     const handleChange = (e) => {
         const { name, value } = e.target;
-        setFormData(prev => ({ ...prev, [name]: value }));
+        setFormData((prev) => ({ ...prev, [name]: value }));
     };
 
-    const handleRegister = (e) => {
+    // Cập nhật hàm handleRegister
+    const handleRegister = async (e) => {
         e.preventDefault();
 
         if (formData.password !== formData.confirmPassword) {
@@ -54,13 +56,24 @@ export default function RegisterPage() {
             return;
         }
 
-        console.log("Dữ liệu gửi đăng ký:", formData);
+        try {
+            // Gọi hàm đăng ký và truyền dữ liệu
+            const response = await register({
+                fullName: formData.fullName,
+                email: formData.email,
+                phoneNumber: formData.phone,
+                password: formData.password,
+            });
 
-        alert(
-            `Đăng ký thành công dưới dạng: ${
-                formData.role === "teacher" ? "Giảng viên" : "Học viên"
-            }`
-        );
+            // Xử lý phản hồi sau khi đăng ký
+            console.log("Đăng ký thành công:", response);
+            alert("Đăng ký thành công!");
+
+            // Tùy chọn: chuyển hướng đến trang đăng nhập
+        } catch (error) {
+            console.error(error.message); // Xử lý lỗi
+            alert("Đăng ký thất bại: " + error.message);
+        }
     };
 
     return (
