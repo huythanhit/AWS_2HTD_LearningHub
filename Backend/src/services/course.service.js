@@ -1,6 +1,9 @@
 // src/services/course.service.js
 import { sql, getRequest } from "../config/db.js";
-import { createNotification } from "./notification.service.js";
+import { 
+  createNotification, 
+  createNotificationsForUsers 
+} from "./notification.service.js";
 
 // ================== ADMIN / TEACHER ==================
 // Lấy danh sách course cho Admin/Teacher
