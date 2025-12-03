@@ -1,5 +1,5 @@
 // src/services/axios.js
-import axios, { AxiosError, AxiosHeaders, type InternalAxiosRequestConfig } from "axios";
+import axios, { AxiosError, AxiosHeaders, InternalAxiosRequestConfig } from "axios";
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
@@ -11,16 +11,16 @@ const apiClient = axios.create({
 });
 
 // REQUEST INTERCEPTOR
-apiClient.interceptors.request.use((config: InternalAxiosRequestConfig) => {
+apiClient.interceptors.request.use((config) => {
   if (!config.headers) {
     config.headers = new AxiosHeaders();
   } else if (!(config.headers instanceof AxiosHeaders)) {
-    config.headers = new AxiosHeaders(config.headers as any);
+    config.headers = new AxiosHeaders(config.headers);
   }
 
   const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token");
   if (token) {
-    (config.headers as AxiosHeaders).set("Authorization", `Bearer ${token}`);
+    config.headers.set("Authorization", `Bearer ${token}`);
   }
 
   return config;
@@ -29,7 +29,7 @@ apiClient.interceptors.request.use((config: InternalAxiosRequestConfig) => {
 // RESPONSE INTERCEPTOR
 apiClient.interceptors.response.use(
   (response) => response,
-  (error: AxiosError) => {
+  (error) => {
     const status = error.response?.status ?? 'ERR';
     const message = error.response?.data?.message || error.message || "Request failed";
 
