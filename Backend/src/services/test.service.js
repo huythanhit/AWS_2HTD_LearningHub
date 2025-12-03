@@ -304,6 +304,7 @@ export async function deleteTeacherExam(teacherId, examId) {
 
 // Học sinh bắt đầu làm bài -> tạo submission mới + trả về đề
 // Học sinh bấm Start để bắt đầu làm bài
+// Học sinh bấm Start để bắt đầu làm bài
 export async function startStudentExam(studentId, examId) {
   const exam = await getExamDetail(examId);
   if (!exam) return null;
@@ -324,6 +325,21 @@ export async function startStudentExam(studentId, examId) {
     userId: studentId,
     autoGraded: true
   });
+
+  // ======= NOTIFICATION: EXAM_STARTED cho Teacher tạo đề =======
+  if (exam.created_by) {
+    await createNotification({
+      userId: exam.created_by,
+      type: 'EXAM_STARTED',
+      payload: {
+        examId: exam.id,
+        examTitle: exam.title,
+        courseId: exam.course_id,
+        submissionId: submission.id,
+        studentId
+      }
+    });
+  }
 
   // ======= TÍNH THÔNG TIN THỜI GIAN =======
   const durationMinutes = exam.duration_minutes; // cột trong DB
@@ -352,9 +368,9 @@ export async function startStudentExam(studentId, examId) {
   return {
     submissionId: submission.id,
     exam,
-    startedAt, // thời điểm bắt đầu (ISO string)
-    durationSeconds, // tổng số giây được làm
-    expiresAt // thời điểm hết giờ (ISO string)
+    startedAt,
+    durationSeconds,
+    expiresAt
   };
 }
 

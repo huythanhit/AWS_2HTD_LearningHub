@@ -1,11 +1,17 @@
-// src/controllers/notification.controller.js
 import * as notificationService from '../services/notification.service.js';
 import { successResponse } from '../utils/response.js';
 
 // GET /api/notifications
 export async function getMyNotifications(req, res, next) {
   try {
-    const userId = req.user.id; // auth.middleware gán vào
+    const userId = req.user.localUserId; // ✅ dùng localUserId trong DB
+
+    if (!userId) {
+      const err = new Error('LOCAL_USER_NOT_FOUND');
+      err.status = 401;
+      throw err;
+    }
+
     const page = parseInt(req.query.page || '1', 10);
     const pageSize = parseInt(req.query.pageSize || '20', 10);
 
@@ -29,7 +35,7 @@ export async function getMyNotifications(req, res, next) {
 // PATCH /api/notifications/:id/read
 export async function markRead(req, res, next) {
   try {
-    const userId = req.user.id;
+    const userId = req.user.localUserId; 
     const { id } = req.params;
 
     await notificationService.markNotificationRead({
@@ -46,7 +52,7 @@ export async function markRead(req, res, next) {
 // PATCH /api/notifications/read-all
 export async function markAllRead(req, res, next) {
   try {
-    const userId = req.user.id;
+    const userId = req.user.localUserId; // ✅
 
     await notificationService.markAllNotificationsRead({ userId });
 

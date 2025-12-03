@@ -269,7 +269,47 @@ export const createLectureService = async (courseId, payload) => {
     );
   `);
 
-  return result.recordset[0];
+  const lecture = result.recordset[0];
+
+  // ===== NOTIFICATION: NEW_LECTURE cho các member đã enroll khóa học =====
+  if (lecture.published) {
+    // Lấy title khóa học
+    const courseReq = await getRequest();
+    courseReq.input("CourseId", sql.UniqueIdentifier, courseId);
+    const courseRes = await courseReq.query(`
+      SELECT title
+      FROM courses
+      WHERE id = @CourseId;
+    `);
+    const courseTitle =
+      courseRes.recordset.length > 0 ? courseRes.recordset[0].title : null;
+
+    // Lấy danh sách member active
+    const enrollReq = await getRequest();
+    enrollReq.input("CourseId", sql.UniqueIdentifier, courseId);
+    const enrollRes = await enrollReq.query(`
+      SELECT user_id
+      FROM enrollments
+      WHERE course_id = @CourseId AND status = N'active';
+    `);
+
+    const userIds = enrollRes.recordset.map((r) => r.user_id);
+
+    if (userIds.length > 0) {
+      await createNotificationsForUsers({
+        userIds,
+        type: "NEW_LECTURE",
+        payloadBuilder: () => ({
+          courseId,
+          courseTitle,
+          lectureId: lecture.lectureId,
+          lectureTitle: lecture.title,
+        }),
+      });
+    }
+  }
+
+  return lecture;
 };
 
 // Update lecture
@@ -520,6 +560,21 @@ export const updateLectureProgressService = async (
   watchedSeconds,
   completed
 ) => {
+  // 1. Lấy trạng thái cũ của enrollment (để biết có phải lần đầu completed không)
+  let wasCompleted = false;
+  const checkReq = await getRequest();
+  checkReq.input("UserId", sql.UniqueIdentifier, userId);
+  checkReq.input("CourseId", sql.UniqueIdentifier, courseId);
+  const enrollCheck = await checkReq.query(`
+    SELECT TOP 1 status
+    FROM enrollments
+    WHERE user_id = @UserId AND course_id = @CourseId;
+  `);
+  if (enrollCheck.recordset.length > 0) {
+    wasCompleted = enrollCheck.recordset[0].status === "completed";
+  }
+
+  // 2. Gọi stored procedure như cũ
   const request = await getRequest();
   request.input("UserId", sql.UniqueIdentifier, userId);
   request.input("CourseId", sql.UniqueIdentifier, courseId);
@@ -534,8 +589,35 @@ export const updateLectureProgressService = async (
   const result = await request.execute(
     "dbo.sp_UpdateLectureProgressAndCourseProgress"
   );
-  return result.recordset[0];
+  const row = result.recordset[0]; // { userId, courseId, lectureId, progressPercent, status }
+
+  // 3. Nếu trước đó chưa completed mà bây giờ status = completed → bắn COURSE_COMPLETED
+  if (row && row.status === "completed" && !wasCompleted) {
+    const courseReq = await getRequest();
+    courseReq.input("CourseId", sql.UniqueIdentifier, courseId);
+    const courseRes = await courseReq.query(`
+      SELECT title
+      FROM courses
+      WHERE id = @CourseId;
+    `);
+    const courseTitle =
+      courseRes.recordset.length > 0 ? courseRes.recordset[0].title : null;
+
+    await createNotification({
+      userId,
+      type: "COURSE_COMPLETED",
+      payload: {
+        courseId,
+        courseTitle,
+        progressPercent: row.progressPercent,
+        status: row.status,
+      },
+    });
+  }
+
+  return row;
 };
+
 
 // My courses của member
 export const getMyCoursesService = async (userId, statusFilter) => {
@@ -587,6 +669,15 @@ export const addTeacherToCourseService = async (courseId, teacherId) => {
     throw error;
   }
 
+  // Lấy title khóa học để dùng cho notification
+  const courseResult = await request.query(`
+    SELECT TOP 1 title
+    FROM courses
+    WHERE id = @CourseId;
+  `);
+  const courseTitle =
+    courseResult.recordset.length > 0 ? courseResult.recordset[0].title : null;
+
   // Nếu chưa tồn tại thì insert
   const result = await request.query(`
     IF NOT EXISTS (
@@ -603,8 +694,21 @@ export const addTeacherToCourseService = async (courseId, teacherId) => {
     WHERE course_id = @CourseId AND teacher_id = @TeacherId;
   `);
 
-  return result.recordset[0];
+  const mapping = result.recordset[0];
+
+  // NOTIFICATION: Teacher được gán vào khóa học
+  await createNotification({
+    userId: teacherId,
+    type: "TEACHER_ASSIGNED_TO_COURSE",
+    payload: {
+      courseId,
+      courseTitle,
+    },
+  });
+
+  return mapping;
 };
+
 
 // Admin bỏ gán teacher khỏi course
 export const removeTeacherFromCourseService = async (courseId, teacherId) => {

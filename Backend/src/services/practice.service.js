@@ -13,13 +13,13 @@ import {
   upsertPracticeCardProgress
 } from '../models/practice.model.js';
 
+
 function httpError(status, message) {
   const err = new Error(message);
   err.status = status;
   return err;
 }
 
-// ===== PRACTICE SETS =====
 
 export async function createPracticeSetService(user, payload) {
   const set = await createPracticeSet(user.id, {
@@ -38,6 +38,36 @@ export async function createPracticeSetService(user, payload) {
   }
 
   const cards = await listPracticeCardsBySet(set.id);
+
+  const roleName = user.roleName;      
+  const courseId = payload.courseId || null;
+
+  if (["Admin", "Teacher"].includes(roleName) && courseId) {
+    const request = await getRequest();
+    request.input("CourseId", sql.UniqueIdentifier, courseId);
+
+
+    const enrollRes = await request.query(`
+      SELECT user_id
+      FROM enrollments
+      WHERE course_id = @CourseId AND status = N'active';
+    `);
+
+    const userIds = enrollRes.recordset.map((r) => r.user_id);
+
+    if (userIds.length > 0) {
+      await createNotificationsForUsers({
+        userIds,
+        type: "NEW_QUIZ",
+        payloadBuilder: () => ({
+          practiceSetId: set.id,
+          title: set.title,
+          courseId
+        })
+      });
+    }
+  }
+
   return { ...set, cards };
 }
 
