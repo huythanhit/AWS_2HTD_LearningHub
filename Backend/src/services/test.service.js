@@ -26,6 +26,14 @@ import {
   getSubmissionWithDetails
 } from '../models/submission.model.js';
 
+// ====== THÊM MỚI CHO NOTIFICATION ======
+import {
+  createNotification,
+  createNotificationsForUsers
+} from './notification.service.js';
+import { sql, getPool } from '../config/db.js';
+// =======================================
+
 // ============================
 // Helper chung
 // ============================
@@ -239,6 +247,33 @@ export async function publishTeacherExam(teacherId, examId, published) {
   }
 
   const updated = await setExamPublished(examId, published);
+
+  // NOTI: Nếu vừa publish và có course, gửi thông báo NEW_EXAM cho các học viên đã enroll
+  if (published && updated.course_id) {
+    const pool = await getPool();
+    const enrollResult = await pool.request()
+      .input('course_id', sql.UniqueIdentifier, updated.course_id)
+      .query(`
+        SELECT user_id
+        FROM enrollments
+        WHERE course_id = @course_id AND status = N'active';
+      `);
+
+    const userIds = enrollResult.recordset.map((r) => r.user_id);
+
+    if (userIds.length > 0) {
+      await createNotificationsForUsers({
+        userIds,
+        type: 'NEW_EXAM',
+        payloadBuilder: () => ({
+          examId: updated.id,
+          examTitle: updated.title,
+          courseId: updated.course_id
+        })
+      });
+    }
+  }
+
   return updated;
 }
 
@@ -599,6 +634,38 @@ export async function submitStudentExam(studentId, submissionId, payload) {
     totalScore,
     resultSummary
   });
+
+  // ===== NOTI: Gửi thông báo cho Member + Teacher =====
+  // 1. Member – EXAM_RESULT
+  await createNotification({
+    userId: submission.user_id,
+    type: 'EXAM_RESULT',
+    payload: {
+      examId: exam.id,
+      examTitle: exam.title,
+      submissionId,
+      courseId: exam.course_id,
+      totalScore,
+      summary: resultSummary
+    }
+  });
+
+  // 2. Teacher – NEW_SUBMISSION (người tạo đề)
+  if (exam.created_by) {
+    await createNotification({
+      userId: exam.created_by,
+      type: 'NEW_SUBMISSION',
+      payload: {
+        examId: exam.id,
+        examTitle: exam.title,
+        submissionId,
+        studentId: submission.user_id,
+        totalScore,
+        summary: resultSummary
+      }
+    });
+  }
+  // ==========================================
 
   return {
     submissionId,

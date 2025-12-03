@@ -1,8 +1,8 @@
 // src/services/course.service.js
 import { sql, getRequest } from "../config/db.js";
+import { createNotification } from "./notification.service.js";
 
 // ================== ADMIN / TEACHER ==================
-
 // Lấy danh sách course cho Admin/Teacher
 export const getAdminCoursesService = async (creatorId, isAdmin) => {
   const request = await getRequest();
@@ -416,8 +416,10 @@ export const enrollCourseService = async (userId, courseId) => {
   request.input("UserId", sql.UniqueIdentifier, userId);
   request.input("CourseId", sql.UniqueIdentifier, courseId);
 
+  // Lấy thêm title + creator_id để dùng cho notification
   const checkCourse = await request.query(`
-    SELECT TOP 1 id FROM courses
+    SELECT TOP 1 id, title, creator_id
+    FROM courses
     WHERE id = @CourseId AND published = 1;
   `);
 
@@ -427,6 +429,9 @@ export const enrollCourseService = async (userId, courseId) => {
     throw error;
   }
 
+  const courseInfo = checkCourse.recordset[0];
+
+  // Kiểm tra đã enroll chưa
   const checkEnroll = await request.query(`
     SELECT TOP 1 id, status, progress_percent, enrolled_at
     FROM enrollments
@@ -434,21 +439,76 @@ export const enrollCourseService = async (userId, courseId) => {
   `);
 
   if (checkEnroll.recordset.length > 0) {
+    // ĐÃ enroll rồi thì không tạo notification nữa
     return {
       alreadyEnrolled: true,
       enrollment: checkEnroll.recordset[0],
     };
   }
 
+  // Chưa enroll -> insert
   const insertResult = await request.query(`
     INSERT INTO enrollments (user_id, course_id)
     OUTPUT INSERTED.id, INSERTED.user_id, INSERTED.course_id, INSERTED.enrolled_at, INSERTED.status, INSERTED.progress_percent
     VALUES (@UserId, @CourseId);
   `);
+  const enrollment = insertResult.recordset[0];
+
+  // ========== NOTIFICATION ==========
+
+  // 1. Gửi cho Member: COURSE_ENROLL
+  await createNotification({
+    userId,
+    type: "COURSE_ENROLL",
+    payload: {
+      courseId,
+      courseTitle: courseInfo.title,
+      enrollmentId: enrollment.id,
+    },
+  });
+
+  // 2. Gửi cho Teacher(s): NEW_ENROLLMENT
+  //    - Teacher chính: creator_id
+  //    - Các teacher được gán thêm trong course_teachers
+  const teacherRequest = await getRequest();
+  teacherRequest.input("CourseId", sql.UniqueIdentifier, courseId);
+
+  const teacherResult = await teacherRequest.query(`
+    SELECT teacher_id
+    FROM course_teachers
+    WHERE course_id = @CourseId;
+  `);
+
+  const teacherIds = new Set();
+
+  if (courseInfo.creator_id) {
+    teacherIds.add(String(courseInfo.creator_id));
+  }
+
+  for (const row of teacherResult.recordset) {
+    if (row.teacher_id) {
+      teacherIds.add(String(row.teacher_id));
+    }
+  }
+
+  for (const teacherId of teacherIds) {
+    await createNotification({
+      userId: teacherId,
+      type: "NEW_ENROLLMENT",
+      payload: {
+        courseId,
+        courseTitle: courseInfo.title,
+        studentId: userId,
+        enrollmentId: enrollment.id,
+      },
+    });
+  }
+
+  // ========== END NOTIFICATION ==========
 
   return {
     alreadyEnrolled: false,
-    enrollment: insertResult.recordset[0],
+    enrollment,
   };
 };
 
