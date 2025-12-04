@@ -6,57 +6,87 @@ import {
 } from "./notification.service.js";
 
 // ================== ADMIN / TEACHER ==================
-// Lấy danh sách course cho Admin/Teacher
+// Lấy danh sách course cho Admin/Teacher (kèm danh sách teachers)
 export const getAdminCoursesService = async (creatorId, isAdmin) => {
   const request = await getRequest();
 
-  if (isAdmin) {
-    const result = await request.query(`
-      SELECT 
-        id AS courseId,
-        slug,
-        title,
-        short_description AS shortDescription,
-        description,
-        price,
-        currency,
-        creator_id AS creatorId,
-        published,
-        published_at AS publishedAt,
-        created_at AS createdAt
-      FROM courses
-      ORDER BY created_at DESC;
-    `);
-    return result.recordset;
+  let query = `
+    SELECT
+      c.id AS courseId,
+      c.slug,
+      c.title,
+      c.short_description AS shortDescription,
+      c.description,
+      c.price,
+      c.currency,
+      c.creator_id AS creatorId,
+      c.published,
+      c.published_at AS publishedAt,
+      c.created_at AS createdAt,
+      u.id AS teacherId,
+      COALESCE(up.full_name, u.email) AS teacherName
+    FROM courses c
+    LEFT JOIN course_teachers ct ON ct.course_id = c.id
+    LEFT JOIN users u ON u.id = ct.teacher_id
+    LEFT JOIN user_profiles up ON up.user_id = u.id
+  `;
+
+  // Nếu là Teacher thì chỉ xem course mình tạo
+  if (!isAdmin) {
+    request.input("CreatorId", sql.UniqueIdentifier, creatorId);
+    query += `
+      WHERE c.creator_id = @CreatorId
+    `;
   }
 
-  // Teacher: chỉ thấy course mình tạo
-  request.input("CreatorId", sql.UniqueIdentifier, creatorId);
-  const result = await request.query(`
-    SELECT 
-      id AS courseId,
-      slug,
-      title,
-      short_description AS shortDescription,
-      description,
-      price,
-      currency,
-      creator_id AS creatorId,
-      published,
-      published_at AS publishedAt,
-      created_at AS createdAt
-    FROM courses
-    WHERE creator_id = @CreatorId
-    ORDER BY created_at DESC;
-  `);
-  return result.recordset;
+  query += `
+    ORDER BY c.created_at DESC;
+  `;
+
+  const result = await request.query(query);
+  const rows = result.recordset;
+
+  // Gom nhiều dòng (do JOIN) thành 1 course + mảng teachers
+  const courseMap = new Map();
+
+  for (const row of rows) {
+    let course = courseMap.get(row.courseId);
+    if (!course) {
+      course = {
+        courseId: row.courseId,
+        slug: row.slug,
+        title: row.title,
+        shortDescription: row.shortDescription,
+        description: row.description,
+        price: row.price,
+        currency: row.currency,
+        creatorId: row.creatorId,
+        published: row.published,
+        publishedAt: row.publishedAt,
+        createdAt: row.createdAt,
+        teachers: [],
+      };
+      courseMap.set(row.courseId, course);
+    }
+
+    if (row.teacherId) {
+      course.teachers.push({
+        teacherId: row.teacherId,
+        fullName: row.teacherName,
+      });
+    }
+  }
+
+  return Array.from(courseMap.values());
 };
+
 
 // Lấy 1 course (cho mục đích check owner / update / delete)
 export const getCourseByIdService = async (courseId) => {
   const request = await getRequest();
   request.input("CourseId", sql.UniqueIdentifier, courseId);
 
+  // Lấy thông tin course
   const result = await request.query(`
     SELECT 
       id AS courseId,
@@ -75,8 +105,26 @@ export const getCourseByIdService = async (courseId) => {
   `);
 
   if (result.recordset.length === 0) return null;
-  return result.recordset[0];
+
+  const course = result.recordset[0];
+
+  // Lấy danh sách teacher của course
+  const teachersResult = await request.query(`
+    SELECT 
+      u.id AS teacherId,
+      COALESCE(up.full_name, u.email) AS fullName, 
+      u.email
+    FROM course_teachers ct
+    JOIN users u ON u.id = ct.teacher_id
+    LEFT JOIN user_profiles up ON up.user_id = u.id
+    WHERE ct.course_id = @CourseId;
+  `);
+
+  course.teachers = teachersResult.recordset;
+
+  return course;
 };
+
 
 // Tạo course mới
 export const createCourseService = async (creatorId, payload) => {
@@ -435,6 +483,20 @@ export const getCourseDetailService = async (courseId) => {
 
   const course = result.recordset[0];
 
+  // Lấy teachers cho course public (dùng user_profiles)
+  const teachersResult = await request.query(`
+    SELECT 
+      u.id AS teacherId,
+      COALESCE(up.full_name, u.email) AS fullName,
+      u.email
+    FROM course_teachers ct
+    JOIN users u ON u.id = ct.teacher_id
+    LEFT JOIN user_profiles up ON up.user_id = u.id
+    WHERE ct.course_id = @CourseId;
+  `);
+
+  course.teachers = teachersResult.recordset;
+
   const lecturesResult = await request.query(`
     SELECT 
       id AS lectureId,
@@ -450,6 +512,7 @@ export const getCourseDetailService = async (courseId) => {
   `);
 
   course.lectures = lecturesResult.recordset;
+
   return course;
 };
 
@@ -647,71 +710,43 @@ export const getMyCoursesService = async (userId, statusFilter) => {
 };
 
 // ================== TEACHER - COURSE MAPPING ==================
-// Admin gán teacher vào course
+// Gán 1 teacher vào course (chỉ cho phép 1 teacher / course)
 export const addTeacherToCourseService = async (courseId, teacherId) => {
   const request = await getRequest();
+
   request.input("CourseId", sql.UniqueIdentifier, courseId);
   request.input("TeacherId", sql.UniqueIdentifier, teacherId);
 
-  // Check teacher tồn tại & đúng role Teacher (3)
-  const checkTeacher = await request.query(`
-    SELECT TOP 1 id, role_id
-    FROM users
-    WHERE id = @TeacherId;
-  `);
-
-  if (checkTeacher.recordset.length === 0) {
-    const error = new Error("TEACHER_NOT_FOUND");
-    error.code = "TEACHER_NOT_FOUND";
-    throw error;
-  }
-
-  if (checkTeacher.recordset[0].role_id !== 3) {
-    const error = new Error("USER_NOT_TEACHER_ROLE");
-    error.code = "USER_NOT_TEACHER_ROLE";
-    throw error;
-  }
-
-  // Lấy title khóa học để dùng cho notification
-  const courseResult = await request.query(`
-    SELECT TOP 1 title
-    FROM courses
-    WHERE id = @CourseId;
-  `);
-  const courseTitle =
-    courseResult.recordset.length > 0 ? courseResult.recordset[0].title : null;
-
-  // Nếu chưa tồn tại thì insert
-  const result = await request.query(`
-    IF NOT EXISTS (
-      SELECT 1 FROM course_teachers
-      WHERE course_id = @CourseId AND teacher_id = @TeacherId
-    )
-    BEGIN
-      INSERT INTO course_teachers (course_id, teacher_id)
-      VALUES (@CourseId, @TeacherId);
-    END
-
-    SELECT course_id AS courseId, teacher_id AS teacherId
+  // 1. Check xem course đã có teacher chưa
+  const existingResult = await request.query(`
+    SELECT TOP 1 teacher_id
     FROM course_teachers
-    WHERE course_id = @CourseId AND teacher_id = @TeacherId;
+    WHERE course_id = @CourseId;
   `);
 
-  const mapping = result.recordset[0];
+  if (existingResult.recordset.length > 0) {
+    // Đã có teacher rồi -> báo lỗi cho controller
+    const currentTeacherId = existingResult.recordset[0].teacher_id;
 
-  // NOTIFICATION: Teacher được gán vào khóa học
-  await createNotification({
-    userId: teacherId,
-    type: "TEACHER_ASSIGNED_TO_COURSE",
-    payload: {
-      courseId,
-      courseTitle,
-    },
-  });
+    const error = new Error(
+      "Course already has a teacher. Remove current teacher before assigning a new one."
+    );
+    error.statusCode = 400;
+    error.currentTeacherId = currentTeacherId;
+    throw error;
+  }
 
-  return mapping;
+  // 2. Insert teacher mới
+  await request.query(`
+    INSERT INTO course_teachers (course_id, teacher_id)
+    VALUES (@CourseId, @TeacherId);
+  `);
+
+  return {
+    courseId,
+    teacherId,
+  };
 };
-
 
 // Admin bỏ gán teacher khỏi course
 export const removeTeacherFromCourseService = async (courseId, teacherId) => {

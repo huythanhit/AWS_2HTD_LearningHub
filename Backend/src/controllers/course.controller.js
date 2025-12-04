@@ -56,6 +56,49 @@ export const getAdminCourses = async (req, res) => {
   }
 };
 
+// GET /api/admin/courses/:courseId
+export const getAdminCourseById = async (req, res) => {
+  try {
+    const user = req.user;
+
+    // Chỉ Admin / Teacher mới được gọi API này
+    if (!user || !isAdminOrTeacher(user)) {
+      return res
+        .status(403)
+        .json({ message: "Forbidden: Admin/Teacher only" });
+    }
+
+    const userId = getUserId(user);
+    if (!userId) {
+      return res
+        .status(401)
+        .json({ message: "Cannot determine user id from token" });
+    }
+
+    const { courseId } = req.params;
+
+    // Lấy course (đã có teachers vì bạn sửa getCourseByIdService rồi)
+    const course = await getCourseByIdService(courseId);
+    if (!course) {
+      return res.status(404).json({ message: "Course not found" });
+    }
+
+    // Check quyền: Admin OK, Teacher phải là creator hoặc được gán vào course
+    const allowed = await canManageCourseContent(user, course, userId);
+    if (!allowed) {
+      return res.status(403).json({
+        message:
+          "Forbidden: chỉ Admin hoặc Teacher của khóa học mới được xem chi tiết",
+      });
+    }
+
+    return res.status(200).json(course);
+  } catch (err) {
+    console.error("getAdminCourseById error:", err);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+};
+
 // POST /api/admin/courses
 export const createCourse = async (req, res) => {
   try {
@@ -217,6 +260,7 @@ export const deleteCourse = async (req, res) => {
 export const assignTeacherToCourse = async (req, res) => {
   try {
     const user = req.user;
+
     if (!user || !isAdmin(user)) {
       return res.status(403).json({ message: "Forbidden: Admin only" });
     }
@@ -224,14 +268,7 @@ export const assignTeacherToCourse = async (req, res) => {
     const { courseId } = req.params;
     const { teacherId } = req.body;
 
-    if (!teacherId) {
-      return res.status(400).json({ message: "teacherId là bắt buộc" });
-    }
-
-    const existingCourse = await getCourseByIdService(courseId);
-    if (!existingCourse) {
-      return res.status(404).json({ message: "Course not found" });
-    }
+    // ... các validate khác nếu có
 
     const assignment = await addTeacherToCourseService(courseId, teacherId);
 
@@ -242,18 +279,18 @@ export const assignTeacherToCourse = async (req, res) => {
   } catch (err) {
     console.error("assignTeacherToCourse error:", err);
 
-    if (err.code === "TEACHER_NOT_FOUND") {
-      return res.status(404).json({ message: "Teacher user not found" });
-    }
-    if (err.code === "USER_NOT_TEACHER_ROLE") {
-      return res
-        .status(400)
-        .json({ message: "User is not in Teacher role (role_id != 3)" });
+    // Nếu service ném lỗi 400 (course đã có teacher)
+    if (err.statusCode === 400) {
+      return res.status(400).json({
+        message: err.message,
+        currentTeacherId: err.currentTeacherId,
+      });
     }
 
     return res.status(500).json({ message: "Internal server error" });
   }
 };
+
 
 // DELETE /api/admin/courses/:courseId/teachers/:teacherId
 export const removeTeacherFromCourse = async (req, res) => {
