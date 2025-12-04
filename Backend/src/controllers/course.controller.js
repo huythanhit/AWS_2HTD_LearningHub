@@ -8,6 +8,7 @@ import {
   createLectureService,
   updateLectureService,
   deleteLectureService,
+  getCourseLecturesService,
   getPublishedCoursesService,
   getCourseDetailService,
   enrollCourseService,
@@ -338,6 +339,44 @@ const canManageCourseContent = async (user, course, userId) => {
   }
 
   return false;
+};
+
+// GET /api/admin/courses/:courseId/lectures
+export const getCourseLectures = async (req, res) => {
+  try {
+    const user = req.user;
+    if (!user || !isAdminOrTeacher(user)) {
+      return res.status(403).json({ message: "Forbidden: Admin/Teacher only" });
+    }
+
+    const userId = getUserId(user);
+    if (!userId) {
+      return res
+        .status(401)
+        .json({ message: "Cannot determine user id from token" });
+    }
+
+    const { courseId } = req.params;
+
+    const existingCourse = await getCourseByIdService(courseId);
+    if (!existingCourse) {
+      return res.status(404).json({ message: "Course not found" });
+    }
+
+    const allowed = await canManageCourseContent(user, existingCourse, userId);
+    if (!allowed) {
+      return res.status(403).json({
+        message:
+          "Forbidden: chỉ Admin hoặc Teacher được gán vào course mới xem danh sách lecture",
+      });
+    }
+
+    const lectures = await getCourseLecturesService(courseId);
+    return res.status(200).json(lectures);
+  } catch (err) {
+    console.error("getCourseLectures error:", err);
+    return res.status(500).json({ message: "Internal server error" });
+  }
 };
 
 // POST /api/admin/courses/:courseId/lectures

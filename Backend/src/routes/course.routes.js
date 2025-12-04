@@ -8,6 +8,7 @@ import {
   createLecture,
   updateLecture,
   deleteLecture,
+  getCourseLectures,
   getPublishedCourses,
   getCourseDetail,
   enrollCourse,
@@ -47,6 +48,13 @@ router.delete(
   "/admin/courses/:courseId/teachers/:teacherId",
   authMiddleware,
   removeTeacherFromCourse
+);
+
+// Lấy danh sách lecture của 1 course
+router.get(
+  "/admin/courses/:courseId/lectures",
+  authMiddleware,
+  getCourseLectures
 );
 
 // Tạo lecture
