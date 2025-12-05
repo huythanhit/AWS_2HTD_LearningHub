@@ -5,7 +5,10 @@ import {
     ArrowUpRight, ArrowDownRight, Filter
 } from 'lucide-react';
 
-// --- CSS STYLES & ANIMATIONS ---
+// [MỚI] Import các hàm API từ service
+import { getAdminUsers, getCourses } from "../../services/adminService";
+
+// --- CSS STYLES & ANIMATIONS (Giữ nguyên) ---
 const styles = `
   @keyframes fadeInUp {
     from { opacity: 0; transform: translateY(20px); }
@@ -34,196 +37,211 @@ const styles = `
   }
 `;
 
-// --- COMPONENT: BIỂU ĐỒ CỘT HIỆN ĐẠI (PRO VERSION) ---
-const ModernBarChart = () => {
-    // Dữ liệu mẫu 6 tháng
-    const data = [
-        { label: 'Tháng 6', value: 120, growth: '+5%' },
-        { label: 'Tháng 7', value: 155, growth: '+12%' },
-        { label: 'Tháng 8', value: 110, growth: '-8%' },
-        { label: 'Tháng 9', value: 240, growth: '+25%' }, // Cao điểm tựu trường
-        { label: 'Tháng 10', value: 210, growth: '+5%' },
-        { label: 'Tháng 11', value: 285, growth: '+18%' },
-    ];
-    
-    const maxVal = Math.max(...data.map(d => d.value)) * 1.1; // Thêm 10% padding top
-
-    return (
-        <div className="relative h-72 w-full flex flex-col justify-end gap-2 pt-8 select-none">
-            {/* Background Grid Lines */}
-            <div className="absolute inset-0 flex flex-col justify-between pointer-events-none z-0 px-2 pb-8 pt-4 opacity-30">
-                {[100, 75, 50, 25, 0].map((line, i) => (
-                    <div key={i} className="w-full border-t border-dashed border-gray-300 relative">
-                        <span className="absolute -left-0 -top-2.5 text-[10px] text-gray-400">{Math.round(maxVal * (line/100))}</span>
+// --- COMPONENT CHART GIẢ LẬP (Giữ nguyên để giao diện đẹp) ---
+const ModernBarChart = () => (
+    <div className="flex items-end justify-between h-64 w-full gap-2 mt-4 px-2">
+        {[45, 67, 89, 54, 78, 92, 65, 88, 76, 54, 87, 95].map((h, i) => (
+            <div key={i} className="flex flex-col items-center gap-2 group w-full">
+                <div className="relative w-full flex items-end justify-center h-full overflow-hidden rounded-t-lg bg-gray-50">
+                    <div 
+                        style={{ height: `${h}%` }} 
+                        className={`w-4/5 rounded-t-lg transition-all duration-1000 ease-out group-hover:opacity-90 animate-grow 
+                        ${i % 2 === 0 ? 'bg-[#5a4d8c]' : 'bg-[#8d7fbf]'}`}
+                    ></div>
+                    {/* Tooltip giả */}
+                    <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-gray-800 text-white text-xs py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
+                        {h * 12} visitors
                     </div>
-                ))}
+                </div>
+                <span className="text-xs text-gray-400 font-medium">T{i + 1}</span>
             </div>
+        ))}
+    </div>
+);
 
-            {/* Bars Container */}
-            <div className="flex items-end justify-between h-full z-10 px-4 md:px-8 gap-4">
-                {data.map((item, index) => {
-                    const heightPct = (item.value / maxVal) * 100;
-                    return (
-                        <div key={index} className="flex flex-col items-center flex-1 h-full justify-end group cursor-pointer relative">
-                            {/* Tooltip */}
-                            <div className="absolute -top-12 opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-y-2 group-hover:translate-y-0 bg-gray-800 text-white text-xs py-1.5 px-3 rounded-lg shadow-lg z-20 whitespace-nowrap">
-                                {item.value} Học viên <span className="text-gray-400">({item.growth})</span>
-                                <div className="absolute bottom-[-4px] left-1/2 -translate-x-1/2 w-2 h-2 bg-gray-800 rotate-45"></div>
-                            </div>
-
-                            {/* The Bar */}
-                            <div 
-                                className="w-full max-w-[40px] rounded-t-lg relative overflow-hidden animate-grow shadow-sm group-hover:shadow-indigo-200 transition-all duration-300"
-                                style={{ 
-                                    height: `${heightPct}%`, 
-                                    animationDelay: `${index * 100}ms`,
-                                    background: `linear-gradient(180deg, #5a4d8c 0%, #8172b8 100%)`
-                                }}
-                            >
-                                {/* Shine Effect overlay */}
-                                <div className="absolute top-0 left-0 w-full h-full bg-white opacity-0 group-hover:opacity-10 transition-opacity duration-300 bg-gradient-to-b from-white/20 to-transparent"></div>
-                            </div>
-
-                            {/* Label */}
-                            <span className="text-xs text-gray-500 font-medium mt-3 group-hover:text-[#5a4d8c] transition-colors">{item.label}</span>
-                        </div>
-                    );
-                })}
-            </div>
-        </div>
-    );
-};
-
-// --- COMPONENT: DONUT CHART (TỈ LỆ) ---
 const DonutChart = ({ pass, fail }) => {
     const total = pass + fail;
-    const passPct = (pass / total) * 100;
-    const dashArray = 2 * Math.PI * 45; // radius 45
-    const passDash = (passPct / 100) * dashArray;
-
+    const passPercent = (pass / total) * 100;
+    
     return (
-        <div className="relative w-full h-full flex flex-col items-center justify-center py-4">
-            <div className="relative w-56 h-56 transform hover:scale-105 transition-transform duration-500 ease-out">
-                <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90 drop-shadow-lg">
-                    {/* Background Circle */}
-                    <circle cx="50" cy="50" r="45" fill="none" stroke="#F3F4F6" strokeWidth="10" />
-                    
-                    {/* Fail Circle (Red Background behind) - optional styling */}
-                    <circle cx="50" cy="50" r="45" fill="none" stroke="#FECACA" strokeWidth="10" 
-                        strokeDasharray={dashArray} strokeDashoffset={passDash} 
-                        className="transition-all duration-1000 ease-out" />
-
-                    {/* Pass Circle (Main) */}
-                    <circle cx="50" cy="50" r="45" fill="none" stroke="url(#gradientPass)" strokeWidth="10" 
-                        strokeLinecap="round" strokeDasharray={`${passDash} ${dashArray - passDash}`}
-                        className="animate-grow origin-center transition-all duration-1000 ease-out" 
-                    />
-                    
-                    {/* Gradients */}
-                    <defs>
-                        <linearGradient id="gradientPass" x1="0%" y1="0%" x2="100%" y2="100%">
-                            <stop offset="0%" stopColor="#5a4d8c" />
-                            <stop offset="100%" stopColor="#818cf8" />
-                        </linearGradient>
-                    </defs>
-                </svg>
-                
-                {/* Center Text */}
-                <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-700">
-                    <span className="text-sm text-gray-400 font-medium">Tỉ lệ Đậu</span>
-                    <span className="text-4xl font-extrabold text-[#5a4d8c]">{Math.round(passPct)}%</span>
-                </div>
-            </div>
-
-            <div className="flex gap-8 mt-4">
-                <div className="flex items-center gap-2">
-                    <span className="w-3 h-3 rounded-full bg-[#5a4d8c]"></span>
-                    <span className="text-sm font-medium text-gray-600">Đạt ({pass})</span>
-                </div>
-                <div className="flex items-center gap-2">
-                    <span className="w-3 h-3 rounded-full bg-red-200"></span>
-                    <span className="text-sm font-medium text-gray-600">Trượt ({fail})</span>
-                </div>
+        <div className="relative w-48 h-48 flex items-center justify-center">
+            <svg viewBox="0 0 36 36" className="w-full h-full rotate-[-90deg]">
+                <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#f3f4f6" strokeWidth="4" />
+                <path 
+                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" 
+                    fill="none" 
+                    stroke="#5a4d8c" 
+                    strokeWidth="4" 
+                    strokeDasharray={`${passPercent}, 100`}
+                    className="animate-[dash_1.5s_ease-out_forwards]"
+                />
+            </svg>
+            <div className="absolute flex flex-col items-center animate-fade-in-up">
+                <span className="text-3xl font-bold text-gray-800">{Math.round(passPercent)}%</span>
+                <span className="text-xs text-gray-500 font-medium uppercase tracking-wider">Tỷ lệ đậu</span>
             </div>
         </div>
     );
 };
 
-// --- MAIN DASHBOARD ---
+// --- COMPONENT CHÍNH ---
 export default function AdminDashboard() {
+    // [MỚI] State để lưu thống kê thực tế
+    const [stats, setStats] = useState({
+        totalUsers: 0,
+        totalCourses: 0,
+        totalTeachers: 0, // Cái này cần lọc từ list user hoặc có API riêng
+        totalRevenue: 0   // Giả lập hoặc lấy từ API nếu có
+    });
+    const [loading, setLoading] = useState(true);
+
+    // [MỚI] Hàm lấy dữ liệu từ Server
+    useEffect(() => {
+        async function fetchDashboardData() {
+            try {
+                setLoading(true);
+
+                // 1. Lấy thông tin Users (Để lấy tổng số user)
+                // Gọi page 1, limit 1 để tiết kiệm băng thông, chỉ cần lấy field pagination.total
+                const usersRes = await getAdminUsers(1, 1000); // Lấy 1000 để lọc teacher (tạm thời)
+                const totalUsers = usersRes.pagination?.total || usersRes.users?.length || 0;
+                
+                // Đếm số teacher (nếu API trả về list user, ta có thể lọc client-side tạm thời)
+                const totalTeachers = usersRes.users ? usersRes.users.filter(u => u.role === 'teacher').length : 0;
+
+                // 2. Lấy thông tin Courses
+                const coursesRes = await getCourses();
+                // Tùy vào format API getCourses trả về mảng hay object có pagination
+                // Giả sử trả về mảng courses trực tiếp hoặc object { data: [...] }
+                const coursesList = Array.isArray(coursesRes) ? coursesRes : (coursesRes.data || []);
+                const totalCourses = coursesList.length;
+
+                // Cập nhật State
+                setStats({
+                    totalUsers: totalUsers,
+                    totalCourses: totalCourses,
+                    totalTeachers: totalTeachers,
+                    totalRevenue: 125000000 // Số liệu giả định (Hardcode vì chưa có API payment)
+                });
+
+            } catch (error) {
+                console.error("Dashboard Sync Error:", error);
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        fetchDashboardData();
+    }, []);
+
+    const statCards = [
+        { 
+            title: "Tổng Học Viên", 
+            value: loading ? "..." : stats.totalUsers.toLocaleString(), // [MỚI] Dùng biến stats
+            change: "+12%", 
+            trend: "up", 
+            icon: Users, 
+            color: "text-blue-600", 
+            bg: "bg-blue-50" 
+        },
+        { 
+            title: "Tổng Khóa Học", 
+            value: loading ? "..." : stats.totalCourses.toLocaleString(), // [MỚI] Dùng biến stats
+            change: "+5%", 
+            trend: "up", 
+            icon: BookOpen, 
+            color: "text-purple-600", 
+            bg: "bg-purple-50" 
+        },
+        { 
+            title: "Giảng Viên", 
+            value: loading ? "..." : stats.totalTeachers.toLocaleString(), // [MỚI] Dùng biến stats
+            change: "+2", 
+            trend: "up", 
+            icon: GraduationCap, 
+            color: "text-emerald-600", 
+            bg: "bg-emerald-50" 
+        },
+        { 
+            title: "Doanh Thu", 
+            value: loading ? "..." : `${(stats.totalRevenue / 1000000).toFixed(1)}M`, // [MỚI] Format tiền
+            change: "+8.5%", 
+            trend: "up", 
+            icon: Activity, 
+            color: "text-orange-600", 
+            bg: "bg-orange-50" 
+        }
+    ];
+
     return (
-        <div className="min-h-screen bg-[#f8fafc] font-sans text-gray-800 p-6 md:p-8">
+        <div className="min-h-screen bg-[#fafafa] p-8 font-sans">
             <style>{styles}</style>
-            
-            {/* --- HEADER --- */}
-            <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-10 animate-fade-in-up">
+
+            {/* HEADER */}
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 animate-fade-in-up">
                 <div>
-                    <div className="flex items-center gap-2 text-gray-500 text-sm font-medium mb-1">
-                        <Calendar size={16} className="text-[#5a4d8c]"/>
-                        <span>{new Date().toLocaleDateString('vi-VN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
-                    </div>
-                    <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">
-                        Tổng Quan Quản Trị
-                    </h1>
+                    <h1 className="text-3xl font-extrabold text-gray-800 tracking-tight">Tổng Quan</h1>
+                    <p className="text-gray-500 mt-1 font-medium">Chào mừng trở lại, Administrator!</p>
                 </div>
-                <div className="flex gap-3">
-                    <button className="px-4 py-2 bg-white border border-gray-200 text-gray-600 rounded-xl text-sm font-semibold hover:bg-gray-50 transition shadow-sm flex items-center gap-2">
-                        <Filter size={16} /> Lọc dữ liệu
+                
+                <div className="flex gap-3 mt-4 md:mt-0">
+                    <button className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-600 rounded-xl hover:bg-gray-50 transition shadow-sm font-medium text-sm">
+                        <Calendar size={18} />
+                        <span>Tháng này</span>
+                        <ChevronDownIcon />
                     </button>
-                    <button className="px-5 py-2 bg-[#5a4d8c] text-white rounded-xl text-sm font-bold hover:bg-[#483d73] transition shadow-lg shadow-indigo-200 flex items-center gap-2">
-                        + Tạo thông báo mới
+                    <button className="flex items-center gap-2 px-4 py-2 bg-[#5a4d8c] text-white rounded-xl hover:bg-[#483d73] transition shadow-lg shadow-indigo-200 font-medium text-sm">
+                        <Filter size={18} />
+                        <span>Tùy chỉnh</span>
                     </button>
                 </div>
             </div>
 
-            {/* --- STATS WIDGETS --- */}
+            {/* STAT CARDS */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
-                {[
-                    { title: "Tổng học viên", value: "2,845", sub: "+125 tháng này", icon: Users, color: "text-blue-600", bg: "bg-blue-50" },
-                    { title: "Tổng giáo viên", value: "42", sub: "Full-time & Part-time", icon: GraduationCap, color: "text-indigo-600", bg: "bg-indigo-50" },
-                    { title: "Khóa học active", value: "18", sub: "Trên tổng số 24", icon: BookOpen, color: "text-orange-600", bg: "bg-orange-50" },
-                    { title: "Tỉ lệ hoàn thành", value: "94.2%", sub: "+2.1% so với kỳ trước", icon: Activity, color: "text-emerald-600", bg: "bg-emerald-50" },
-                ].map((stat, idx) => (
+                {statCards.map((item, index) => (
                     <div 
-                        key={idx} 
+                        key={index} 
                         className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm hover-card-effect animate-fade-in-up"
-                        style={{ animationDelay: `${idx * 0.1}s` }}
+                        style={{ animationDelay: `${index * 100}ms` }}
                     >
                         <div className="flex justify-between items-start mb-4">
-                            <div className={`p-3.5 rounded-2xl ${stat.bg} ${stat.color}`}>
-                                <stat.icon size={26} strokeWidth={2.5} />
+                            <div className={`p-3 rounded-xl ${item.bg}`}>
+                                <item.icon className={item.color} size={24} />
                             </div>
-                            <button className="text-gray-300 hover:text-gray-500 transition"><MoreHorizontal size={20}/></button>
+                            {item.change && (
+                                <span className={`flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-full ${
+                                    item.trend === 'up' ? 'text-green-600 bg-green-50' : 'text-red-600 bg-red-50'
+                                }`}>
+                                    {item.trend === 'up' ? <ArrowUpRight size={12}/> : <ArrowDownRight size={12}/>}
+                                    {item.change}
+                                </span>
+                            )}
                         </div>
-                        <div className="space-y-1">
-                            <h3 className="text-3xl font-bold text-gray-800">{stat.value}</h3>
-                            <p className="text-sm font-semibold text-gray-500">{stat.title}</p>
-                            <p className={`text-xs font-medium mt-2 flex items-center gap-1 ${stat.sub.includes('+') ? 'text-green-600' : 'text-gray-400'}`}>
-                                {stat.sub.includes('+') && <TrendingUp size={12} />}
-                                {stat.sub}
-                            </p>
+                        <div>
+                            <p className="text-gray-500 text-sm font-medium mb-1">{item.title}</p>
+                            <h3 className="text-2xl font-bold text-gray-800">{item.value}</h3>
                         </div>
                     </div>
                 ))}
             </div>
 
-            {/* --- CHARTS SECTION --- */}
+            {/* CHARTS SECTION */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                
-                {/* 1. CHART: Tăng trưởng học viên (Chiếm 2/3) */}
-                <div className="lg:col-span-2 bg-white p-8 rounded-3xl border border-gray-100 shadow-sm animate-fade-in-up hover:shadow-md transition-shadow duration-300 delay-200">
+                {/* 1. CHART: Thống kê truy cập (Chiếm 2/3) */}
+                <div className="lg:col-span-2 bg-white p-8 rounded-3xl border border-gray-100 shadow-sm animate-fade-in-up delay-200 flex flex-col">
                     <div className="flex justify-between items-center mb-6">
                         <div>
-                            <h2 className="text-xl font-bold text-gray-800">Phân tích tăng trưởng học viên</h2>
-                            <p className="text-sm text-gray-500 mt-1">Số lượng đăng ký mới trong 6 tháng gần nhất</p>
+                            <h2 className="text-xl font-bold text-gray-800">Lượt truy cập hệ thống</h2>
+                            <p className="text-sm text-gray-500 mt-1">Số liệu thống kê theo thời gian thực</p>
                         </div>
-                        <div className="flex bg-gray-100 p-1 rounded-lg">
-                            <button className="px-3 py-1 bg-white rounded-md text-xs font-bold text-gray-700 shadow-sm">6 tháng</button>
-                            <button className="px-3 py-1 text-xs font-medium text-gray-500 hover:text-gray-700">1 năm</button>
+                        <div className="flex bg-gray-50 p-1 rounded-lg">
+                            <button className="px-3 py-1 bg-white shadow-sm rounded-md text-xs font-medium text-gray-800">7 ngày</button>
+                            <button className="px-3 py-1 rounded-md text-xs font-medium text-gray-500 hover:text-gray-700">30 ngày</button>
+                            <button className="px-3 py-1 rounded-md text-xs font-medium text-gray-500 hover:text-gray-700">1 năm</button>
                         </div>
                     </div>
                     
-                    {/* Chèn Component Chart */}
                     <div className="w-full">
                         <ModernBarChart />
                     </div>
@@ -237,6 +255,7 @@ export default function AdminDashboard() {
                     </div>
                     
                     <div className="flex-1 flex items-center justify-center">
+                        {/* Dữ liệu chart này thường cần API Report riêng, tạm thời vẫn để hardcode hoặc lấy từ stats nếu backend hỗ trợ */}
                         <DonutChart pass={1560} fail={340} />
                     </div>
 
@@ -250,3 +269,10 @@ export default function AdminDashboard() {
         </div>
     );
 }
+
+// Icon helper nhỏ
+const ChevronDownIcon = () => (
+    <svg width="10" height="6" viewBox="0 0 10 6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M1 1L5 5L9 1" />
+    </svg>
+);
