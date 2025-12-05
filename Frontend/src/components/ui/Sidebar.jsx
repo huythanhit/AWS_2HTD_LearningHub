@@ -14,7 +14,8 @@ import {
     ShieldCheck,
     Database,
     Shield,    // <-- Đây là icon bị thiếu gây ra lỗi
-    BarChart2
+    BarChart2,
+    Brain
 } from 'lucide-react';
 
 // --- CONFIG: Danh sách Menu Items cho Member ---
@@ -30,6 +31,7 @@ export const teacherMenuItems = [
     { label: 'Tổng quan', to: '/teacher', icon: LayoutDashboard },
     { label: 'Quản lý Lớp học', to: '/teacher/classes', icon: Users },
     { label: 'Quản lý Bài tập', to: '/teacher/assignments', icon: FileText },
+    { label: 'Bài tập Flashcard', to: '/teacher/quiz', icon: Brain },
     { label: 'Cài đặt', to: '/teacher/settings', icon: Settings },
 ];
 export const adminMenuItems = [

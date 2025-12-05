@@ -6,7 +6,7 @@ import apiClient from "./https";
  */
 export async function getExams() {
   try {
-    const res = await apiClient.get("/api/tests/exams");
+    const res = await apiClient.get("/api/tests/questions");
     const result = res.data;
 
     if (!result.success || !result.data) {
