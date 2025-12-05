@@ -26,6 +26,7 @@ import MemberSettings from "../pages/Member/MemberSettings";
 import TeacherDashboard from "../pages/Teacher/TeacherDashboard";
 import TeacherClasses from "../pages/Teacher/TeacherClasses";
 import TeacherAssignments from "../pages/Teacher/TeacherAssignments";
+import TeacherQuiz from "../pages/Teacher/TeacherQuiz";
 import TeacherSettings from "../pages/Teacher/TeacherSettings";
 // Routes Protection
 import PrivateRoute from "./PrivateRoute";
@@ -88,6 +89,7 @@ const routes = createBrowserRouter([
             { index: true, element: <TeacherDashboard /> },
             { path: "classes", element: <TeacherClasses /> },
             { path: "assignments", element: <TeacherAssignments /> },
+            { path: "quiz", element: <TeacherQuiz /> },
             { path: "settings", element: <TeacherSettings /> },
             { path: "*", element: <Navigate to="/teacher" replace /> },
         ],
