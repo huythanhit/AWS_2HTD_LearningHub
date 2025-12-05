@@ -17,6 +17,7 @@ import {
   addTeacherToCourseService,
   removeTeacherFromCourseService,
   getTeacherCoursesService,
+  getLecturesByTeacherInCourseService,
   isTeacherOfCourseService,
 } from "../services/course.service.js";
 
@@ -699,6 +700,32 @@ export const getMyCourses = async (req, res) => {
     return res.status(200).json(myCourses);
   } catch (err) {
     console.error("getMyCourses error:", err);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+// GET /api/admin/teachers/:teacherId/courses/:courseId/lectures
+export const getLecturesByTeacherInCourse = async (req, res) => {
+  try {
+    const user = req.user;
+
+    // Chỉ Admin
+    if (!user || !isAdmin(user)) {
+      return res.status(403).json({ message: "Forbidden: Admin only" });
+    }
+
+    const { teacherId, courseId } = req.params;
+
+    const lectures = await getLecturesByTeacherInCourseService(courseId, teacherId);
+
+    return res.status(200).json({
+      courseId,
+      teacherId,
+      total: lectures.length,
+      lectures,
+    });
+  } catch (err) {
+    console.error("getLecturesByTeacherInCourse error:", err);
     return res.status(500).json({ message: "Internal server error" });
   }
 };

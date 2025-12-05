@@ -827,3 +827,33 @@ export const isTeacherOfCourseService = async (courseId, teacherId) => {
 
   return result.recordset.length > 0;
 };
+
+//admin xem các bài giảng của teacher có trong khóa học
+export const getLecturesByTeacherInCourseService = async (courseId, teacherId) => {
+  const request = await getRequest();
+
+  request.input("CourseId", sql.UniqueIdentifier, courseId);
+  request.input("TeacherId", sql.UniqueIdentifier, teacherId);
+
+  // Chỉ lấy lectures của course mà teacher này đang được gán
+  const result = await request.query(`
+    SELECT 
+      l.id AS lectureId,
+      l.title,
+      l.content_type AS contentType,
+      l.s3_key AS s3Key,
+      l.duration_seconds AS durationSeconds,
+      l.order_index AS orderIndex,
+      l.published,
+      l.created_at AS createdAt,
+      l.updated_at AS updatedAt
+    FROM lectures l
+    JOIN courses c ON c.id = l.course_id
+    JOIN course_teachers ct ON ct.course_id = c.id
+    WHERE l.course_id = @CourseId
+      AND ct.teacher_id = @TeacherId
+    ORDER BY l.order_index ASC, l.created_at ASC;
+  `);
+
+  return result.recordset;
+};

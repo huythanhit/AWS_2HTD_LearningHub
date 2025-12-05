@@ -18,6 +18,7 @@ import {
   assignTeacherToCourse,
   removeTeacherFromCourse,
   getTeacherCourses,
+  getLecturesByTeacherInCourse,
 } from "../controllers/course.controller.js";
 
 import { authMiddleware } from "../middlewares/auth.middleware.js";
@@ -81,6 +82,13 @@ router.delete(
   "/admin/courses/:courseId/lectures/:lectureId",
   authMiddleware,
   deleteLecture
+);
+
+// Admin xem danh sách bài giảng của 1 teacher trong 1 khóa
+router.get(
+  "/admin/teachers/:teacherId/courses/:courseId/lectures",
+  authMiddleware,
+  getLecturesByTeacherInCourse
 );
 
 // =============== TEACHER ===============
