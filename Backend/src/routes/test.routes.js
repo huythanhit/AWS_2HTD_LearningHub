@@ -17,38 +17,7 @@ function requireAuth(...roles) {
 // ADMIN / TEACHER
 // =====================
 
-// CÂU HỎI
-router.post(
-  '/questions',
-  ...requireAuth('Teacher', 'Admin'),
-  testController.createQuestion
-);
-
-router.get(
-  '/questions',
-  ...requireAuth('Teacher', 'Admin'),
-  testController.listMyQuestions
-);
-
-router.get(
-  '/questions/:id',
-  ...requireAuth('Teacher', 'Admin'),
-  testController.getQuestionDetail
-);
-
-router.put(
-  '/questions/:id',
-  ...requireAuth('Teacher', 'Admin'),
-  testController.updateQuestion
-);
-
-router.delete(
-  '/questions/:id',
-  ...requireAuth('Teacher', 'Admin'),
-  testController.deleteQuestion
-);
-
-// ĐỀ THI
+// ===== ĐỀ THI =====
 router.post(
   '/exams',
   ...requireAuth('Teacher', 'Admin'),
@@ -85,6 +54,37 @@ router.delete(
   testController.deleteExam
 );
 
+// ===== CÂU HỎI TRONG ĐỀ =====
+router.post(
+  '/exams/:examId/questions',
+  ...requireAuth('Teacher', 'Admin'),
+  testController.createQuestionInExam
+);
+
+router.get(
+  '/exams/:examId/questions',
+  ...requireAuth('Teacher', 'Admin'),
+  testController.listQuestionsInExam
+);
+
+router.get(
+  '/exams/:examId/questions/:questionId',
+  ...requireAuth('Teacher', 'Admin'),
+  testController.getQuestionInExamDetail
+);
+
+router.put(
+  '/exams/:examId/questions/:questionId',
+  ...requireAuth('Teacher', 'Admin'),
+  testController.updateQuestionInExam
+);
+
+router.delete(
+  '/exams/:examId/questions/:questionId',
+  ...requireAuth('Teacher', 'Admin'),
+  testController.deleteQuestionInExam
+);
+
 // =====================
 // MEMBER
 // =====================
@@ -117,7 +117,7 @@ router.get(
   testController.reviewSubmission
 );
 
-// demo member-test (giữ nếu bạn cần)
+// Demo member-test (nếu còn dùng)
 router.get(
   '/member-test',
   ...requireAuth('Member'),
