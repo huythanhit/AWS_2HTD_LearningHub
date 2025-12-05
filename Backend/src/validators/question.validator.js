@@ -11,14 +11,14 @@ const baseFields = {
 
 // Option dùng cho các dạng trắc nghiệm (có thể kèm ảnh / audio)
 const optionSchema = Joi.object({
-  text: Joi.string().allow('', null),       // nội dung đáp án
+  text: Joi.string().allow('', null), // nội dung đáp án
   imageUrl: Joi.string().uri().allow(null), // dùng cho image_choice
   audioUrl: Joi.string().uri().allow(null), // dùng cho audio_choice
-  value: Joi.string().allow(null),          // ví dụ: "T", "F", "NG"
+  value: Joi.string().allow(null), // ví dụ: "T", "F", "NG"
   isCorrect: Joi.boolean().required()
 });
 
-// Schema chính
+// Schema chính tạo câu hỏi (dùng cho /questions)
 export const createQuestionSchema = Joi.object({
   ...baseFields,
 
@@ -60,4 +60,10 @@ export const createQuestionSchema = Joi.object({
       otherwise: Joi.forbidden()
     })
   })
+});
+
+// Schema dùng khi tạo câu hỏi TRONG exam
+export const createQuestionInExamSchema = createQuestionSchema.keys({
+  points: Joi.number().min(0).default(1),
+  sequence: Joi.number().integer().min(1).optional()
 });

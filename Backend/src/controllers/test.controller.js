@@ -1,7 +1,7 @@
 // src/controllers/test.controller.js
 
 import { successResponse, errorResponse } from '../utils/response.js';
-import { createQuestionSchema } from '../validators/question.validator.js';
+import { createQuestionInExamSchema } from '../validators/question.validator.js';
 import { createExamSchema } from '../validators/exam.validator.js';
 import { submitExamSchema } from '../validators/submission.validator.js';
 
@@ -13,133 +13,7 @@ import * as testService from '../services/test.service.js';
 export async function testMemberAccess(req, res, next) {
   try {
     const user = req.user;
-
-    return successResponse(
-      res,
-      {
-        message: 'Chào mừng Member! Bạn có quyền truy cập endpoint này.',
-        accessGranted: true,
-        userInfo: {
-          email: user.email,
-          role: user.roleName,
-          cognitoGroups: user.groups,
-          localUserId: user.localUserId
-        },
-        timestamp: new Date().toISOString()
-      },
-      'Member access granted',
-      200
-    );
-  } catch (err) {
-    return next(err);
-  }
-}
-
-// ============================
-// GIÁO VIÊN / ADMIN – CÂU HỎI
-// ============================
-
-// POST /api/tests/questions
-export async function createQuestion(req, res, next) {
-  try {
-    const { error, value } = createQuestionSchema.validate(req.body, {
-      abortEarly: false
-    });
-
-    if (error) {
-      const details = error.details.map((d) => d.message);
-      return errorResponse(res, 'Validation error', 400, details);
-    }
-
-    const teacherId = req.user.localUserId;
-    const question = await testService.createTeacherQuestion(teacherId, value);
-
-    return successResponse(res, question, 'Question created', 201);
-  } catch (err) {
-    return next(err);
-  }
-}
-
-// GET /api/tests/questions
-export async function listMyQuestions(req, res, next) {
-  try {
-    const teacherId = req.user.localUserId;
-
-    const page = parseInt(req.query.page || '1', 10);
-    const pageSize = parseInt(req.query.pageSize || '20', 10);
-    const search = req.query.search || null;
-    const type = req.query.type || null;
-
-    const questions = await testService.listTeacherQuestions(teacherId, {
-      search,
-      type,
-      page,
-      pageSize
-    });
-
-    return successResponse(res, { items: questions, page, pageSize });
-  } catch (err) {
-    return next(err);
-  }
-}
-
-// GET /api/tests/questions/:id
-export async function getQuestionDetail(req, res, next) {
-  try {
-    const teacherId = req.user.localUserId;
-    const { id } = req.params;
-
-    const question = await testService.getTeacherQuestionDetail(
-      teacherId,
-      id
-    );
-
-    if (!question) {
-      return errorResponse(res, 'Question not found', 404);
-    }
-
-    return successResponse(res, question);
-  } catch (err) {
-    return next(err);
-  }
-}
-
-// PUT /api/tests/questions/:id
-export async function updateQuestion(req, res, next) {
-  try {
-    const { error, value } = createQuestionSchema.validate(req.body, {
-      abortEarly: false
-    });
-
-    if (error) {
-      const details = error.details.map((d) => d.message);
-      return errorResponse(res, 'Validation error', 400, details);
-    }
-
-    const teacherId = req.user.localUserId;
-    const { id } = req.params;
-
-    const question = await testService.updateTeacherQuestion(
-      teacherId,
-      id,
-      value
-    );
-
-    return successResponse(res, question, 'Question updated');
-  } catch (err) {
-    return next(err);
-  }
-}
-
-// DELETE /api/tests/questions/:id
-export async function deleteQuestion(req, res, next) {
-  try {
-    const teacherId = req.user.localUserId;
-    const { id } = req.params;
-
-    await testService.deleteTeacherQuestion(teacherId, id);
-
-    return successResponse(res, null, 'Question deleted');
+    return successResponse(res, { user }, 'Member access OK');
   } catch (err) {
     return next(err);
   }
@@ -184,13 +58,13 @@ export async function listMyExams(req, res, next) {
       search
     });
 
-    return successResponse(res, { items: exams, page, pageSize });
+    return successResponse(res, exams, 'My exams');
   } catch (err) {
     return next(err);
   }
 }
 
-// GET /api/tests/exams/:id (cho GV/Admin xem chi tiết)
+// GET /api/tests/exams/:id
 export async function getExamDetail(req, res, next) {
   try {
     const { id } = req.params;
@@ -200,7 +74,7 @@ export async function getExamDetail(req, res, next) {
       return errorResponse(res, 'Exam not found', 404);
     }
 
-    return successResponse(res, exam);
+    return successResponse(res, exam, 'Exam detail');
   } catch (err) {
     return next(err);
   }
@@ -240,7 +114,11 @@ export async function publishExam(req, res, next) {
       return errorResponse(res, 'published must be boolean', 400);
     }
 
-    const exam = await testService.publishTeacherExam(teacherId, id, published);
+    const exam = await testService.publishTeacherExam(
+      teacherId,
+      id,
+      published
+    );
 
     return successResponse(
       res,
@@ -267,21 +145,129 @@ export async function deleteExam(req, res, next) {
 }
 
 // ============================
-// HỌC SINH
+// GIÁO VIÊN / ADMIN – CÂU HỎI TRONG ĐỀ
+// ============================
+
+// POST /api/tests/exams/:examId/questions
+export async function createQuestionInExam(req, res, next) {
+  try {
+    const { error, value } = createQuestionInExamSchema.validate(req.body, {
+      abortEarly: false
+    });
+
+    if (error) {
+      const details = error.details.map((d) => d.message);
+      return errorResponse(res, 'Validation error', 400, details);
+    }
+
+    const teacherId = req.user.localUserId;
+    const { examId } = req.params;
+
+    const question = await testService.createQuestionInExam(
+      teacherId,
+      examId,
+      value
+    );
+
+    return successResponse(res, question, 'Question created in exam', 201);
+  } catch (err) {
+    return next(err);
+  }
+}
+
+// GET /api/tests/exams/:examId/questions
+export async function listQuestionsInExam(req, res, next) {
+  try {
+    const teacherId = req.user.localUserId;
+    const { examId } = req.params;
+
+    const questions = await testService.listQuestionsInExam(
+      teacherId,
+      examId
+    );
+
+    return successResponse(res, questions, 'Questions in exam');
+  } catch (err) {
+    return next(err);
+  }
+}
+
+// GET /api/tests/exams/:examId/questions/:questionId
+export async function getQuestionInExamDetail(req, res, next) {
+  try {
+    const teacherId = req.user.localUserId;
+    const { examId, questionId } = req.params;
+
+    const question = await testService.getQuestionInExamDetail(
+      teacherId,
+      examId,
+      questionId
+    );
+
+    return successResponse(res, question, 'Question detail in exam');
+  } catch (err) {
+    return next(err);
+  }
+}
+
+// PUT /api/tests/exams/:examId/questions/:questionId
+export async function updateQuestionInExam(req, res, next) {
+  try {
+    const { error, value } = createQuestionInExamSchema.validate(req.body, {
+      abortEarly: false
+    });
+
+    if (error) {
+      const details = error.details.map((d) => d.message);
+      return errorResponse(res, 'Validation error', 400, details);
+    }
+
+    const teacherId = req.user.localUserId;
+    const { examId, questionId } = req.params;
+
+    const question = await testService.updateQuestionInExam(
+      teacherId,
+      examId,
+      questionId,
+      value
+    );
+
+    return successResponse(res, question, 'Question in exam updated');
+  } catch (err) {
+    return next(err);
+  }
+}
+
+// DELETE /api/tests/exams/:examId/questions/:questionId
+export async function deleteQuestionInExam(req, res, next) {
+  try {
+    const teacherId = req.user.localUserId;
+    const { examId, questionId } = req.params;
+
+    await testService.deleteQuestionInExam(teacherId, examId, questionId);
+
+    return successResponse(res, null, 'Question in exam deleted');
+  } catch (err) {
+    return next(err);
+  }
+}
+
+// ============================
+// PHẦN HỌC SINH
 // ============================
 
 // POST /api/tests/exams/:id/start
 export async function startExamForStudent(req, res, next) {
   try {
-    const examId = req.params.id;
     const studentId = req.user.localUserId;
+    const { id } = req.params;
 
-    const data = await testService.startStudentExam(studentId, examId);
-    if (!data) {
+    const result = await testService.startStudentExam(studentId, id);
+    if (!result) {
       return errorResponse(res, 'Exam not found', 404);
     }
 
-    return successResponse(res, data, 'Exam started');
+    return successResponse(res, result, 'Exam started');
   } catch (err) {
     return next(err);
   }
@@ -299,12 +285,12 @@ export async function submitExam(req, res, next) {
       return errorResponse(res, 'Validation error', 400, details);
     }
 
-    const submissionId = req.params.id;
     const studentId = req.user.localUserId;
+    const { id } = req.params; // submissionId
 
     const result = await testService.submitStudentExam(
       studentId,
-      submissionId,
+      id,
       value
     );
 
@@ -321,12 +307,12 @@ export async function listMySubmissions(req, res, next) {
     const page = parseInt(req.query.page || '1', 10);
     const pageSize = parseInt(req.query.pageSize || '20', 10);
 
-    const submissions = await testService.listStudentSubmissions(studentId, {
-      page,
-      pageSize
-    });
+    const submissions = await testService.listStudentSubmissions(
+      studentId,
+      { page, pageSize }
+    );
 
-    return successResponse(res, { items: submissions, page, pageSize });
+    return successResponse(res, submissions, 'My submissions');
   } catch (err) {
     return next(err);
   }
@@ -335,16 +321,14 @@ export async function listMySubmissions(req, res, next) {
 // GET /api/tests/submissions/:id/review
 export async function reviewSubmission(req, res, next) {
   try {
-    const submissionId = req.params.id;
-    const user = req.user || null; // có thể null nếu chưa login, tuỳ bạn
+    const { id } = req.params;
 
-    const data = await testService.getSubmissionReview(submissionId, user);
-
-    if (!data) {
+    const review = await testService.getSubmissionReview(id, req.user);
+    if (!review) {
       return errorResponse(res, 'Submission not found', 404);
     }
 
-    return successResponse(res, data, 'Submission review');
+    return successResponse(res, review, 'Submission review');
   } catch (err) {
     return next(err);
   }
