@@ -69,7 +69,9 @@ export async function getExamDetail(examId) {
       e.passing_score,
       e.randomize_questions,
       e.published,
-      e.created_by
+      e.created_by,
+      e.created_at,
+      e.updated_at
     FROM exams e
     WHERE e.id = @exam_id;
   `);
@@ -135,11 +137,13 @@ export async function getExamsByCreator({
       e.duration_minutes,
       e.passing_score,
       e.randomize_questions,
-      e.published
+      e.published,
+      e.created_at,
+      e.updated_at
     FROM exams e
     WHERE e.created_by = @created_by
       AND (@search IS NULL OR e.title LIKE '%' + @search + '%')
-    ORDER BY e.title ASC
+    ORDER BY e.created_at DESC, e.id DESC
     OFFSET @offset ROWS
     FETCH NEXT @pageSize ROWS ONLY;
   `);
