@@ -185,13 +185,14 @@ export async function createQuestionInExam(req, res, next) {
     const teacherId = req.user.localUserId;
     const { examId } = req.params;
 
-    const question = await testService.createQuestionInExam(
+    const result = await testService.createQuestionInExam(
       teacherId,
       examId,
       value
     );
 
-    return successResponse(res, question, 'Question created in exam', 201);
+    // result: { examId, examTitle, ..., questions: [ { ... } ] }
+    return successResponse(res, result, 'Question created in exam', 201);
   } catch (err) {
     return next(err);
   }
@@ -203,12 +204,10 @@ export async function listQuestionsInExam(req, res, next) {
     const teacherId = req.user.localUserId;
     const { examId } = req.params;
 
-    const questions = await testService.listQuestionsInExam(
-      teacherId,
-      examId
-    );
+    const result = await testService.listQuestionsInExam(teacherId, examId);
 
-    return successResponse(res, questions, 'Questions in exam');
+    // result: { examId, examTitle, ..., questions: [ ... ] }
+    return successResponse(res, result, 'Questions in exam');
   } catch (err) {
     return next(err);
   }
@@ -220,13 +219,14 @@ export async function getQuestionInExamDetail(req, res, next) {
     const teacherId = req.user.localUserId;
     const { examId, questionId } = req.params;
 
-    const question = await testService.getQuestionInExamDetail(
+    const result = await testService.getQuestionInExamDetail(
       teacherId,
       examId,
       questionId
     );
 
-    return successResponse(res, question, 'Question detail in exam');
+    // result: { examId, examTitle, ..., questions: [ one question ] }
+    return successResponse(res, result, 'Question detail in exam');
   } catch (err) {
     return next(err);
   }
@@ -247,14 +247,15 @@ export async function updateQuestionInExam(req, res, next) {
     const teacherId = req.user.localUserId;
     const { examId, questionId } = req.params;
 
-    const question = await testService.updateQuestionInExam(
+    const result = await testService.updateQuestionInExam(
       teacherId,
       examId,
       questionId,
       value
     );
 
-    return successResponse(res, question, 'Question in exam updated');
+    // result: { examId, examTitle, ..., questions: [ one question ] }
+    return successResponse(res, result, 'Question in exam updated');
   } catch (err) {
     return next(err);
   }

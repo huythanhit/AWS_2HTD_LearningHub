@@ -55,8 +55,6 @@ function parseExamQuestions(exam) {
 // Map 1 dòng exam_questions + questions thành object trả cho FE
 function mapExamQuestionRow(q) {
   return {
-    examQuestionId: q.exam_question_id,
-    examId: q.exam_id,
     questionId: q.question_id,
     title: q.title,
     body: q.body,
@@ -66,6 +64,22 @@ function mapExamQuestionRow(q) {
     tags: q.tags || null,
     points: Number(q.points ?? 1),
     sequence: q.sequence
+  };
+}
+
+// Build response chung cho các API về câu hỏi trong đề thi
+function buildExamQuestionsResponse(exam, questionItems) {
+  return {
+    examId: exam.id,
+    examTitle: exam.title,
+    examDescription: exam.description,
+    durationMinutes: exam.duration_minutes,
+    passingScore: exam.passing_score,
+    randomizeQuestions: exam.randomize_questions,
+    published: exam.published,
+    createdAt: exam.created_at,
+    updatedAt: exam.updated_at,
+    questions: questionItems
   };
 }
 
@@ -212,8 +226,8 @@ async function ensureExamOwnedByTeacher(teacherId, examId) {
 
 // Tạo câu hỏi và gắn vào 1 exam
 export async function createQuestionInExam(teacherId, examId, payload) {
-  // 1. Check exam thuộc về teacher
-  await ensureExamOwnedByTeacher(teacherId, examId);
+  // 1. Check exam thuộc về teacher và lấy meta đề
+  const exam = await ensureExamOwnedByTeacher(teacherId, examId);
 
   // 2. Tạo câu hỏi (bank)
   const question = await createTeacherQuestion(teacherId, payload);
@@ -243,12 +257,19 @@ export async function createQuestionInExam(teacherId, examId, payload) {
 
   const eq = result.recordset[0];
 
-  return {
-    ...question,
-    examQuestionId: eq.id,
+  const questionItem = {
+    questionId: question.id,
+    title: question.title,
+    body: question.body,
+    type: question.type,
+    difficulty: question.difficulty,
+    choices: question.choices || null,
+    tags: question.tags || null,
     points: Number(eq.points ?? 1),
     sequence: eq.sequence
   };
+
+  return buildExamQuestionsResponse(exam, [questionItem]);
 }
 
 // Lấy danh sách câu hỏi trong 1 exam (GV)
@@ -256,7 +277,9 @@ export async function listQuestionsInExam(teacherId, examId) {
   const exam = await ensureExamOwnedByTeacher(teacherId, examId);
   parseExamQuestions(exam);
 
-  return (exam.questions || []).map(mapExamQuestionRow);
+  const questionItems = (exam.questions || []).map(mapExamQuestionRow);
+
+  return buildExamQuestionsResponse(exam, questionItems);
 }
 
 // Lấy chi tiết 1 câu hỏi trong exam (GV)
@@ -265,13 +288,11 @@ export async function getQuestionInExamDetail(
   examId,
   questionId
 ) {
-  const exam = await ensureExamOwnedByTeacher(teacherId, examId);
-  parseExamQuestions(exam);
+  const result = await listQuestionsInExam(teacherId, examId);
+  const key = String(questionId).toLowerCase();
 
-  const q = (exam.questions || []).find(
-    (it) =>
-      String(it.question_id).toLowerCase() ===
-      String(questionId).toLowerCase()
+  const q = (result.questions || []).find(
+    (it) => String(it.questionId).toLowerCase() === key
   );
 
   if (!q) {
@@ -280,8 +301,12 @@ export async function getQuestionInExamDetail(
     throw err;
   }
 
-  return mapExamQuestionRow(q);
+  return {
+    ...result,
+    questions: [q] 
+  };
 }
+
 
 // Cập nhật câu hỏi trong exam (cả nội dung + điểm / thứ tự)
 export async function updateQuestionInExam(
@@ -290,8 +315,8 @@ export async function updateQuestionInExam(
   questionId,
   payload
 ) {
-  // check exam thuộc về teacher
-  await ensureExamOwnedByTeacher(teacherId, examId);
+  // check exam thuộc về teacher và lấy meta đề
+  const exam = await ensureExamOwnedByTeacher(teacherId, examId);
 
   const { points, sequence, ...questionFields } = payload;
 
@@ -354,10 +379,8 @@ export async function updateQuestionInExam(
     ? JSON.parse(updatedQuestion.tags)
     : null;
 
-  return {
-    examQuestionId: eq.id,
-    examId: eq.exam_id,
-    questionId: eq.question_id,
+  const questionItem = {
+    questionId,
     title: updatedQuestion.title,
     body: updatedQuestion.body,
     type: updatedQuestion.type,
@@ -367,6 +390,8 @@ export async function updateQuestionInExam(
     points: Number(eq.points ?? 1),
     sequence: eq.sequence
   };
+
+  return buildExamQuestionsResponse(exam, [questionItem]);
 }
 
 // Xoá câu hỏi khỏi exam (và xoá luôn question nếu không còn dùng ở exam nào khác)
