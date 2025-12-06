@@ -223,3 +223,46 @@ export async function deleteExamById(examId) {
     WHERE id = @id;
   `);
 }
+
+// =============================
+// DANH SÁCH ĐỀ ĐÃ PUBLISH CHO MEMBER
+// =============================
+export async function getPublishedExamsForUser({
+  page = 1,
+  pageSize = 20,
+  search = null,
+  courseId = null
+}) {
+  await poolConnect;
+  const request = pool.request();
+
+  const offset = (page - 1) * pageSize;
+
+  request.input('search', sql.NVarChar(255), search || null);
+  request.input('offset', sql.Int, offset);
+  request.input('pageSize', sql.Int, pageSize);
+  request.input('course_id', sql.UniqueIdentifier, courseId || null);
+
+  const result = await request.query(`
+    SELECT
+      e.id,
+      e.course_id,
+      e.title,
+      e.description,
+      e.duration_minutes,
+      e.passing_score,
+      e.randomize_questions,
+      e.published,
+      e.created_at,
+      e.updated_at
+    FROM exams e
+    WHERE e.published = 1
+      AND (@search IS NULL OR e.title LIKE '%' + @search + '%')
+      AND (@course_id IS NULL OR e.course_id = @course_id)
+    ORDER BY e.created_at DESC, e.id DESC
+    OFFSET @offset ROWS
+    FETCH NEXT @pageSize ROWS ONLY;
+  `);
+
+  return result.recordset;
+}

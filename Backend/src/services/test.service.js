@@ -3,8 +3,10 @@
 
 import {
   createQuestion,
+  getQuestionsByAuthor,
   getQuestionById,
-  updateQuestionById
+  updateQuestionById,
+  deleteQuestionById
 } from '../models/question.model.js';
 
 import {
@@ -13,7 +15,8 @@ import {
   getExamsByCreator,
   updateExam,
   setExamPublished,
-  deleteExamById
+  deleteExamById,
+  getPublishedExamsForUser 
 } from '../models/exam.model.js';
 
 import {
@@ -53,9 +56,8 @@ function parseExamQuestions(exam) {
 // PHẦN GIÁO VIÊN / ADMIN
 // ============================
 
-// ---------- CÂU HỎI (helper, dùng cho câu hỏi trong đề) ----------
-
-// Tạo câu hỏi (thuộc về teacher, nhưng dùng trong exam)
+// ---------- CÂU HỎI ----------
+// Tạo câu hỏi cho giáo viên
 export async function createTeacherQuestion(teacherId, payload) {
   const { title, body, type, choices, difficulty, tags } = payload;
 
@@ -82,7 +84,27 @@ export async function createTeacherQuestion(teacherId, payload) {
   return question;
 }
 
-// Lấy chi tiết 1 câu hỏi của giáo viên (dùng để check quyền khi update)
+// Lấy danh sách câu hỏi của giáo viên
+export async function listTeacherQuestions(
+  teacherId,
+  { search, type, page, pageSize }
+) {
+  const questions = await getQuestionsByAuthor({
+    authorId: teacherId,
+    search,
+    type,
+    page,
+    pageSize
+  });
+
+  return questions.map((q) => ({
+    ...q,
+    choices: q.choices ? JSON.parse(q.choices) : null,
+    tags: q.tags ? JSON.parse(q.tags) : null
+  }));
+}
+
+// Lấy chi tiết 1 câu hỏi của giáo viên
 export async function getTeacherQuestionDetail(teacherId, questionId) {
   const question = await getQuestionById(questionId);
 
@@ -93,7 +115,7 @@ export async function getTeacherQuestionDetail(teacherId, questionId) {
     throw err;
   }
 
-  // Không phải câu hỏi của giáo viên hiện tại
+  // chỉ cho xem câu hỏi của chính mình
   if (
     String(question.author_id).toLowerCase() !==
     String(teacherId).toLowerCase()
@@ -110,9 +132,9 @@ export async function getTeacherQuestionDetail(teacherId, questionId) {
   };
 }
 
-// Cập nhật nội dung câu hỏi (dùng trong updateQuestionInExam)
+// Cập nhật câu hỏi
 export async function updateTeacherQuestion(teacherId, questionId, payload) {
-  // Nếu không tồn tại hoặc không đúng teacher => hàm trên sẽ throw 404 / 403
+  // Check quyền + tồn tại
   await getTeacherQuestionDetail(teacherId, questionId);
 
   const choicesJson = payload.choices
@@ -126,7 +148,6 @@ export async function updateTeacherQuestion(teacherId, questionId, payload) {
     tagsJson
   });
 
-  // Phòng trường hợp update không trả về gì
   if (!updated) {
     const err = new Error('Question not found');
     err.status = 404;
@@ -140,9 +161,17 @@ export async function updateTeacherQuestion(teacherId, questionId, payload) {
   };
 }
 
+// Xoá câu hỏi
+export async function deleteTeacherQuestion(teacherId, questionId) {
+  // Check quyền + tồn tại
+  await getTeacherQuestionDetail(teacherId, questionId);
+
+  await deleteQuestionById(questionId);
+}
+
 // ---------- ĐỀ THI ----------
 
-// Check exam thuộc về teacher
+// ====== CÂU HỎI TRONG 1 EXAM (luồng mới) ======
 async function ensureExamOwnedByTeacher(teacherId, examId) {
   const exam = await getExamDetail(examId);
   if (!exam) {
@@ -204,124 +233,7 @@ export async function createQuestionInExam(teacherId, examId, payload) {
   };
 }
 
-// Lấy danh sách câu hỏi trong 1 exam
-export async function listQuestionsInExam(teacherId, examId) {
-  const exam = await ensureExamOwnedByTeacher(teacherId, examId);
-  parseExamQuestions(exam);
-  return exam.questions;
-}
-
-// Lấy chi tiết 1 câu hỏi trong exam
-export async function getQuestionInExamDetail(
-  teacherId,
-  examId,
-  questionId
-) {
-  const exam = await ensureExamOwnedByTeacher(teacherId, examId);
-  parseExamQuestions(exam);
-
-  const q = (exam.questions || []).find(
-    (item) =>
-      String(item.question_id).toLowerCase() ===
-      String(questionId).toLowerCase()
-  );
-
-  if (!q) {
-    const err = new Error('Question not found in this exam');
-    err.status = 404;
-    throw err;
-  }
-
-  return q;
-}
-
-// Cập nhật câu hỏi trong exam (nội dung + points/sequence)
-export async function updateQuestionInExam(
-  teacherId,
-  examId,
-  questionId,
-  payload
-) {
-  // 1. Đảm bảo exam thuộc giáo viên
-  await ensureExamOwnedByTeacher(teacherId, examId);
-
-  // 2. Tách phần nội dung câu hỏi
-  const questionPayload = { ...payload };
-  delete questionPayload.points;
-  delete questionPayload.sequence;
-
-  // 3. Update nội dung câu hỏi
-  const updatedQuestion = await updateTeacherQuestion(
-    teacherId,
-    questionId,
-    questionPayload
-  );
-
-  // 4. Update điểm & thứ tự trong exam_questions
-  const pool = await getPool();
-  const request = pool.request();
-
-  request.input('exam_id', sql.UniqueIdentifier, examId);
-  request.input('question_id', sql.UniqueIdentifier, questionId);
-  request.input(
-    'points',
-    sql.Decimal(6, 2),
-    payload.points != null ? payload.points : 1
-  );
-  request.input(
-    'sequence',
-    sql.Int,
-    payload.sequence != null ? payload.sequence : 0
-  );
-
-  const result = await request.query(`
-    UPDATE exam_questions
-    SET points = @points,
-        sequence = @sequence
-    OUTPUT inserted.*
-    WHERE exam_id = @exam_id AND question_id = @question_id;
-  `);
-
-  const eq = result.recordset[0];
-  if (!eq) {
-    const err = new Error('Question not found in this exam');
-    err.status = 404;
-    throw err;
-  }
-
-  return {
-    ...updatedQuestion,
-    examQuestionId: eq.id,
-    points: Number(eq.points ?? 1),
-    sequence: eq.sequence
-  };
-}
-
-// Xoá câu hỏi ra khỏi exam (KHÔNG xoá question gốc)
-export async function deleteQuestionInExam(teacherId, examId, questionId) {
-  await ensureExamOwnedByTeacher(teacherId, examId);
-
-  const pool = await getPool();
-  const request = pool.request();
-
-  request.input('exam_id', sql.UniqueIdentifier, examId);
-  request.input('question_id', sql.UniqueIdentifier, questionId);
-
-  const result = await request.query(`
-    DELETE FROM exam_questions
-    WHERE exam_id = @exam_id AND question_id = @question_id;
-  `);
-
-  if (!result.rowsAffected || result.rowsAffected[0] === 0) {
-    const err = new Error('Question not found in this exam');
-    err.status = 404;
-    throw err;
-  }
-}
-
-// ---------- ĐỀ THI (CRUD) ----------
-
-// Tạo bài kiểm tra
+// Tạo bài kiểm tra 
 export async function createTeacherExam(teacherId, payload) {
   const exam = await createExam({
     courseId: payload.courseId || null,
@@ -354,6 +266,22 @@ export async function listTeacherExams(
     pageSize,
     search
   });
+  return exams;
+}
+
+// (MỚI) List đề thi đã publish cho Member
+export async function listMemberPublicExams(
+  userId,
+  { page, pageSize, search, courseId }
+) {
+  const exams = await getPublishedExamsForUser({
+    page,
+    pageSize,
+    search,
+    courseId
+  });
+
+  // hiện tại không filter theo enrollments, chỉ lấy tất cả exam publish.
   return exams;
 }
 

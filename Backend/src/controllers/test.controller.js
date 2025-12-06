@@ -64,6 +64,28 @@ export async function listMyExams(req, res, next) {
   }
 }
 
+// (MỚI) GET /api/tests/public-exams – Member xem exam đã publish
+export async function listPublicExamsForMember(req, res, next) {
+  try {
+    const userId = req.user.localUserId;
+    const page = parseInt(req.query.page || '1', 10);
+    const pageSize = parseInt(req.query.pageSize || '20', 10);
+    const search = req.query.search || null;
+    const courseId = req.query.courseId || null;
+
+    const exams = await testService.listMemberPublicExams(userId, {
+      page,
+      pageSize,
+      search,
+      courseId
+    });
+
+    return successResponse(res, exams, 'Public exams');
+  } catch (err) {
+    return next(err);
+  }
+}
+
 // GET /api/tests/exams/:id
 export async function getExamDetail(req, res, next) {
   try {

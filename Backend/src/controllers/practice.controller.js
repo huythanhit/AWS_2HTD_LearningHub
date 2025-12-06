@@ -9,8 +9,15 @@ import {
   updatePracticeCardService,
   deletePracticeCardService,
   getStudyCardsService,
-  reviewPracticeCardService
+  reviewPracticeCardService,
+  deletePracticeSetService,
+  publishPracticeSetService,
+  listPracticeCardsInSetService,
+  getPracticeCardDetailService,
+  getTeacherPracticeSetDetailService
 } from '../services/practice.service.js';
+
+// ===== QUIZ (PRACTICE SET) =====
 
 export async function createPracticeSet(req, res, next) {
   try {
@@ -23,7 +30,41 @@ export async function createPracticeSet(req, res, next) {
 
 export async function updatePracticeSet(req, res, next) {
   try {
-    const data = await updatePracticeSetService(req.user, req.params.setId, req.body);
+    const data = await updatePracticeSetService(
+      req.user,
+      req.params.setId,
+      req.body
+    );
+    res.json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function deletePracticeSet(req, res, next) {
+  try {
+    await deletePracticeSetService(req.user, req.params.setId);
+    res.status(204).send();
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function publishPracticeSet(req, res, next) {
+  try {
+    const { published } = req.body;
+    if (typeof published !== 'boolean') {
+      return res.status(400).json({
+        success: false,
+        message: 'published must be boolean'
+      });
+    }
+
+    const data = await publishPracticeSetService(
+      req.user,
+      req.params.setId,
+      published
+    );
     res.json({ success: true, data });
   } catch (err) {
     next(err);
@@ -50,12 +91,29 @@ export async function listPublishedPracticeSets(req, res, next) {
 
 export async function getPracticeSetDetail(req, res, next) {
   try {
-    const data = await getPracticeSetDetailService(req.params.setId);
+    const data = await getPracticeSetDetailService(
+      req.user,
+      req.params.setId
+    );
     res.json({ success: true, data });
   } catch (err) {
     next(err);
   }
 }
+
+export async function getTeacherPracticeSetDetail(req, res, next) {
+  try {
+    const data = await getTeacherPracticeSetDetailService(
+      req.user,
+      req.params.setId
+    );
+    res.json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ===== CARDS TRONG QUIZ =====
 
 export async function addCardToPracticeSet(req, res, next) {
   try {
@@ -96,6 +154,33 @@ export async function deletePracticeCard(req, res, next) {
     next(err);
   }
 }
+
+export async function listPracticeCardsInSet(req, res, next) {
+  try {
+    const data = await listPracticeCardsInSetService(
+      req.user,
+      req.params.setId
+    );
+    res.json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function getPracticeCardDetail(req, res, next) {
+  try {
+    const data = await getPracticeCardDetailService(
+      req.user,
+      req.params.setId,
+      req.params.cardId
+    );
+    res.json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ===== STUDY + REVIEW =====
 
 export async function getStudyCards(req, res, next) {
   try {

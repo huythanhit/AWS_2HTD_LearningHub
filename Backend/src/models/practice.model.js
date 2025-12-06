@@ -25,7 +25,7 @@ function buildFiltersQuery(baseQuery, request, filters) {
   return query;
 }
 
-// ===== PRACTICE SETS =====
+// ===== PRACTICE SETS (QUIZ) =====
 
 export async function createPracticeSet(ownerId, payload) {
   const pool = await getPool();
@@ -56,7 +56,12 @@ export async function createPracticeSet(ownerId, payload) {
   return result.recordset[0];
 }
 
-export async function updatePracticeSet(setId, ownerId, payload, isAdmin = false) {
+export async function updatePracticeSet(
+  setId,
+  ownerId,
+  payload,
+  isAdmin = false
+) {
   const pool = await getPool();
   const request = pool.request();
 
@@ -141,6 +146,34 @@ export async function listPublishedPracticeSets(filters = {}) {
   return result.recordset;
 }
 
+// Xoá cả quiz + cards + progress
+export async function deletePracticeSet(setId, ownerId, isAdmin = false) {
+  const pool = await getPool();
+  const request = pool.request();
+
+  request.input('set_id', sql.UniqueIdentifier, setId);
+  if (!isAdmin) {
+    request.input('owner_id', sql.UniqueIdentifier, ownerId);
+  }
+
+  const whereOwner = isAdmin ? '' : ' AND owner_id = @owner_id';
+
+  await request.query(`
+    -- Xoá progress gắn với các card trong deck
+    DELETE fp
+    FROM flashcard_progress fp
+    JOIN flashcards f ON fp.flashcard_id = f.id
+    WHERE f.deck_id = @set_id;
+
+    -- Xoá cards
+    DELETE FROM flashcards WHERE deck_id = @set_id;
+
+    -- Xoá deck
+    DELETE FROM flashcard_decks
+    WHERE id = @set_id${whereOwner};
+  `);
+}
+
 // ===== CARDS =====
 
 export async function listPracticeCardsBySet(setId) {
@@ -156,6 +189,18 @@ export async function listPracticeCardsBySet(setId) {
   `);
 
   return result.recordset;
+}
+
+export async function getPracticeCardById(cardId) {
+  const pool = await getPool();
+  const request = pool.request();
+  request.input('card_id', sql.UniqueIdentifier, cardId);
+
+  const result = await request.query(`
+    SELECT * FROM flashcards WHERE id = @card_id;
+  `);
+
+  return result.recordset[0];
 }
 
 export async function createPracticeCard(setId, payload) {
