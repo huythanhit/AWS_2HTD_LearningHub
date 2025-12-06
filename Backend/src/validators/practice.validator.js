@@ -28,7 +28,9 @@ const cardSchema = Joi.object({
 const createPracticeSetSchema = Joi.object({
   title: Joi.string().min(1).required(),
   description: Joi.string().allow('', null),
-  category: Joi.string().valid('vocabulary', 'grammar', 'communication', 'other').required(),
+  category: Joi.string()
+    .valid('vocabulary', 'grammar', 'communication', 'other')
+    .required(),
   topic: Joi.string().min(1).required(),
   language: Joi.string().min(1).required(),
   courseId: Joi.string().guid({ version: 'uuidv4' }).allow(null).optional(),
@@ -36,14 +38,19 @@ const createPracticeSetSchema = Joi.object({
   cards: Joi.array().items(cardSchema).optional()
 });
 
+// Update meta, không cho sửa published ở đây nữa
 const updatePracticeSetSchema = Joi.object({
   title: Joi.string(),
   description: Joi.string().allow('', null),
-  category: Joi.string().valid('vocabulary', 'grammar', 'communication', 'other'),
+  category: Joi.string().valid(
+    'vocabulary',
+    'grammar',
+    'communication',
+    'other'
+  ),
   topic: Joi.string(),
   language: Joi.string(),
-  courseId: Joi.string().guid({ version: 'uuidv4' }).allow(null),
-  published: Joi.boolean()
+  courseId: Joi.string().guid({ version: 'uuidv4' }).allow(null)
 });
 
 const createCardSchema = cardSchema;

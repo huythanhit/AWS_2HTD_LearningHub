@@ -89,6 +89,13 @@ router.delete(
 // MEMBER
 // =====================
 
+// (MỚI) List các exam đã publish để Member thấy / làm
+router.get(
+  '/public-exams',
+  ...requireAuth('Member'),
+  testController.listPublicExamsForMember
+);
+
 // Bắt đầu làm bài
 router.post(
   '/exams/:id/start',
@@ -117,7 +124,7 @@ router.get(
   testController.reviewSubmission
 );
 
-// Demo member-test (nếu còn dùng)
+// demo member-test (giữ nếu bạn cần)
 router.get(
   '/member-test',
   ...requireAuth('Member'),
