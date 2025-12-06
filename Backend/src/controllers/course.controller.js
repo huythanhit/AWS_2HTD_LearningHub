@@ -209,6 +209,12 @@ export const updateCourse = async (req, res) => {
     });
   } catch (err) {
     console.error("updateCourse error:", err);
+    // Lỗi trùng UNIQUE KEY (2627 / 2601)
+    if (err.number === 2627 || err.number === 2601) {
+    return res.status(400).json({
+      message: "Slug đã tồn tại, hãy chọn slug khác.",
+    });
+  }
     return res.status(500).json({ message: "Internal server error" });
   }
 };
