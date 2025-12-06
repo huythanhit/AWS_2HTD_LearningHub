@@ -1,9 +1,8 @@
-// src/components/admin/AdminCourses.jsx
 import React, { useState, useEffect } from "react";
 import {
   Search, Plus, LayoutGrid, List, X, Edit, Filter,
   BookOpen, Video, FileText, Clock, Calendar, CheckCircle, Save,
-  Trash2 // [MỚI] Import icon thùng rác
+  Trash2 
 } from "lucide-react";
 
 import {
@@ -17,8 +16,9 @@ import {
   updateCourse,
   getTeacherCourseLectures,
   updateCourseLecture,
-  deleteCourseLecture // [MỚI] Import hàm xóa bài giảng
+  deleteCourseLecture 
 } from "../../services/adminService";
+import { courseValidationSchema, validateSchema } from "../../validation/adminValidators";
 
 export default function AdminCourses() {
   // --- STATE ---
@@ -50,6 +50,36 @@ const [lectureSearchTerm, setLectureSearchTerm] = useState(""); // [MỚI] Tìm 
   const [selectedTeacher, setSelectedTeacher] = useState("");
 
   const [newCourse, setNewCourse] = useState({ title: "", slug: "", shortDescription: "", description: "", published: false });
+  const [newCourseErrors, setNewCourseErrors] = useState({});
+  const [editingCourseErrors, setEditingCourseErrors] = useState({});
+
+  // try to map backend validation errors into field -> message object
+  const extractFieldErrorsFromApi = (err) => {
+    const out = {};
+    const data = err?.response?.data || err?.response || null;
+    if (!data) return out;
+
+    // If API returns structured errors
+    if (data.errors && typeof data.errors === 'object') {
+      Object.entries(data.errors).forEach(([k, v]) => {
+        if (Array.isArray(v)) out[k] = v.join(' ');
+        else out[k] = String(v);
+      });
+      return out;
+    }
+
+    // If message contains field names, map them heuristically
+    const msg = (data.message || data.msg || data.error || '').toString();
+    if (!msg) return out;
+    const lower = msg.toLowerCase();
+    if (lower.includes('slug')) out.slug = msg;
+    if (lower.includes('title') || lower.includes('tên') || lower.includes('name')) out.title = msg;
+    // fallback: if message mentions both fields explicitly like "slug và title"
+    if (lower.includes('slug') && (lower.includes('title') || lower.includes('tên'))) {
+      out.slug = msg; out.title = msg;
+    }
+    return out;
+  };
   const [editingCourse, setEditingCourse] = useState(null);
   const [editingOriginal, setEditingOriginal] = useState(null);
 
@@ -89,6 +119,13 @@ const [lectureSearchTerm, setLectureSearchTerm] = useState(""); // [MỚI] Tìm 
 
   useEffect(() => { loadCourses(); fetchTeachers(); }, []);
 
+  // open create modal helper: reset form and errors
+  const openCreateModalCourse = () => {
+    setNewCourse({ title: "", slug: "", shortDescription: "", description: "", published: false });
+    setNewCourseErrors({});
+    setIsCreateModalOpen(true);
+  };
+
   // --- HANDLERS ---
   const handleViewLectures = async (courseId, teacherId, teacherName, courseTitle) => {
     setViewingContext({ teacherName, courseTitle, courseId });
@@ -102,7 +139,7 @@ const [lectureSearchTerm, setLectureSearchTerm] = useState(""); // [MỚI] Tìm 
       const data = await getTeacherCourseLectures(teacherId, courseId);
       const sortedLectures = (data.lectures || []).sort((a, b) => (a.orderIndex || 0) - (b.orderIndex || 0));
       setCourseLectures(sortedLectures);
-    } catch (err) { alert("Không thể tải danh sách bài giảng."); } finally { setLecturesLoading(false); }
+    } catch (err) { window.showGlobalPopup ? window.showGlobalPopup({ type: 'error', message: 'Không thể tải danh sách bài giảng.' }) : alert('Không thể tải danh sách bài giảng.'); } finally { setLecturesLoading(false); }
   };
 
   // Open Edit Lecture Modal
@@ -122,19 +159,24 @@ const [lectureSearchTerm, setLectureSearchTerm] = useState(""); // [MỚI] Tìm 
 
   // Update Lecture
   const handleUpdateLecture = async () => {
-    if (!editingLecture.title || !editingLecture.lectureId) { alert("Thiếu thông tin."); return; }
+    if (!editingLecture.title || !editingLecture.lectureId) {
+      if (window.showGlobalPopup) window.showGlobalPopup({ type: 'error', message: 'Thiếu thông tin.' }); else alert('Thiếu thông tin.');
+      return;
+    }
     try {
       const res = await updateCourseLecture(editingLecture.courseId, editingLecture.lectureId, editingLecture);
       const updatedLecture = res.lecture;
       // Cập nhật state local
       setCourseLectures(prev => prev.map(l => l.lectureId === updatedLecture.lectureId ? updatedLecture : l).sort((a, b) => a.orderIndex - b.orderIndex));
-      setIsEditLectureModalOpen(false); setEditingLecture(null); alert("Cập nhật bài giảng thành công!");
+      setIsEditLectureModalOpen(false); setEditingLecture(null);
+      if (window.showGlobalPopup) window.showGlobalPopup({ type: 'success', message: 'Cập nhật bài giảng thành công!' }); else alert('Cập nhật bài giảng thành công!');
     } catch (err) { alert("Lỗi cập nhật: " + err.message); }
   };
 
   // [MỚI] Delete Lecture Logic
   const handleDeleteLecture = async (lectureId) => {
-    if (!confirm("Bạn có chắc chắn muốn xóa bài giảng này không? Hành động này không thể hoàn tác.")) return;
+    const ok = window.showGlobalConfirm ? await window.showGlobalConfirm("Bạn có chắc chắn muốn xóa bài giảng này không? Hành động này không thể hoàn tác.") : confirm("Bạn có chắc chắn muốn xóa bài giảng này không? Hành động này không thể hoàn tác.");
+    if (!ok) return;
 
     const currentCourseId = viewingContext?.courseId;
     if (!currentCourseId) { alert("Lỗi: Không tìm thấy Course ID"); return; }
@@ -144,42 +186,53 @@ const [lectureSearchTerm, setLectureSearchTerm] = useState(""); // [MỚI] Tìm 
 
       // Xóa khỏi danh sách đang hiển thị ngay lập tức
       setCourseLectures(prev => prev.filter(l => l.lectureId !== lectureId));
-      alert("Đã xóa bài giảng thành công!");
+      if (window.showGlobalPopup) window.showGlobalPopup({ type: 'success', message: 'Đã xóa bài giảng thành công!' }); else alert('Đã xóa bài giảng thành công!');
     } catch (err) {
       console.error(err);
-      alert("Không thể xóa bài giảng. Vui lòng thử lại.");
+      if (window.showGlobalPopup) window.showGlobalPopup({ type: 'error', message: 'Không thể xóa bài giảng. Vui lòng thử lại.' }); else alert('Không thể xóa bài giảng. Vui lòng thử lại.');
     }
   };
 
 
   // ... (Giữ nguyên CRUD Course handlers) ...
   const handleCreateCourse = async () => {
-    // Validate cơ bản (tùy chọn)
-    if (!newCourse.title) {
-        alert("Vui lòng nhập tên khóa học");
-        return;
+    // run validation
+    const errors = await validateSchema(courseValidationSchema, newCourse);
+    if (Object.keys(errors).length) {
+      setNewCourseErrors(errors);
+      return;
     }
+    setNewCourseErrors({});
 
     try {
       const created = await createCourse(newCourse);
-      
+
       // created lúc này là object "course" từ API
       // Thêm vào đầu danh sách và giữ nguyên các trường mặc định (như teachers = [])
       setCourses([ { ...created, teachers: [] }, ...courses]);
-      
+
       setIsCreateModalOpen(false);
-      
+
       // Reset form về rỗng
       setNewCourse({ title: "", slug: "", shortDescription: "", description: "", published: false });
-      alert("Tạo khóa học thành công!");
+      if (window.showGlobalPopup) window.showGlobalPopup({ type: 'success', message: 'Tạo khóa học thành công!' }); else alert('Tạo khóa học thành công!');
     } catch (err) {
       console.error(err);
-      alert("Lỗi tạo khóa học: " + (err.response?.data?.message || err.message));
+      const fieldErrors = extractFieldErrorsFromApi(err);
+      if (Object.keys(fieldErrors).length) {
+        // show inline errors in create modal
+        setNewCourseErrors(fieldErrors);
+        return;
+      }
+      const msg = err.response?.data?.message || err.message || 'Lỗi tạo khóa học';
+      if (window.showGlobalPopup) window.showGlobalPopup({ type: 'error', message: 'Lỗi tạo khóa học: ' + msg }); else alert('Lỗi tạo khóa học: ' + msg);
     }
   };
   const handleDeleteCourse = async (courseId) => {
     // 1. Hộp thoại xác nhận (Confirm Dialog)
-    const isConfirmed = window.confirm(
+    const isConfirmed = window.showGlobalConfirm ? await window.showGlobalConfirm(
+      "⚠️ CẢNH BÁO: Bạn có chắc chắn muốn xóa khóa học này không?\n\nHành động này sẽ xóa vĩnh viễn khóa học và các dữ liệu liên quan. Bạn không thể hoàn tác."
+    ) : window.confirm(
       "⚠️ CẢNH BÁO: Bạn có chắc chắn muốn xóa khóa học này không?\n\nHành động này sẽ xóa vĩnh viễn khóa học và các dữ liệu liên quan. Bạn không thể hoàn tác."
     );
 
@@ -194,18 +247,66 @@ const [lectureSearchTerm, setLectureSearchTerm] = useState(""); // [MỚI] Tìm 
       setCourses((prevCourses) => prevCourses.filter((c) => c.courseId !== courseId));
 
       // 4. Thông báo thành công
-      alert("Đã xóa khóa học thành công!");
+      if (window.showGlobalPopup) window.showGlobalPopup({ type: 'success', message: 'Đã xóa khóa học thành công!' }); else alert('Đã xóa khóa học thành công!');
     } catch (err) {
       console.error("DELETE COURSE ERROR:", err);
       // Hiển thị lỗi từ backend nếu có message, hoặc lỗi chung
-      alert("Xóa thất bại: " + (err.response?.data?.message || err.message || "Vui lòng thử lại sau."));
+      const msg = err.response?.data?.message || err.message || 'Vui lòng thử lại sau.';
+      if (window.showGlobalPopup) window.showGlobalPopup({ type: 'error', message: 'Xóa thất bại: ' + msg }); else alert('Xóa thất bại: ' + msg);
     }
   };
-  const handleAssignTeacher = async () => { if (!selectedTeacher || !assignCourseId) return; await assignTeacherToCourse(assignCourseId, selectedTeacher); loadCourses(); setIsAssignModalOpen(false); alert("Gán ok"); };
-  const handleRemoveTeacher = async (cid, tid) => { if (confirm("Gỡ GV?")) { await removeTeacherFromCourse(cid, tid); loadCourses(); } };
+  const handleAssignTeacher = async () => {
+    if (!selectedTeacher || !assignCourseId) return;
+    // Validate: if course already has a teacher, show validation and do not assign
+    const course = courses.find(c => c.courseId === assignCourseId);
+    if (course && Array.isArray(course.teachers) && course.teachers.length > 0) {
+      if (window.showGlobalPopup) window.showGlobalPopup({ type: 'error', message: 'Lớp học đã có giảng viên.' }); else alert('Lớp học đã có giảng viên.');
+      return;
+    }
+
+    try {
+      await assignTeacherToCourse(assignCourseId, selectedTeacher);
+      await loadCourses();
+      setIsAssignModalOpen(false);
+      setSelectedTeacher("");
+      setAssignCourseId(null);
+      if (window.showGlobalPopup) window.showGlobalPopup({ type: 'success', message: 'Gán giảng viên thành công' }); else alert('Gán giảng viên thành công');
+    } catch (err) {
+      console.error('ASSIGN TEACHER ERROR', err);
+      const msg = err.response?.data?.message || err.message || 'Vui lòng thử lại.';
+      if (window.showGlobalPopup) window.showGlobalPopup({ type: 'error', message: 'Gán thất bại: ' + msg }); else alert('Gán thất bại: ' + msg);
+    }
+  };
+
+  const handleRemoveTeacher = async (cid, tid) => {
+    const ok = window.showGlobalConfirm
+      ? await window.showGlobalConfirm('Bạn có chắc chắn muốn gỡ giảng viên khỏi khóa học này? Hành động này sẽ gỡ liên kết giữa GV và khóa học.')
+      : confirm('Bạn có chắc chắn muốn gỡ giảng viên khỏi khóa học này?');
+    if (!ok) return;
+
+    try {
+      await removeTeacherFromCourse(cid, tid);
+      await loadCourses();
+      if (window.showGlobalPopup) window.showGlobalPopup({ type: 'success', message: 'Gỡ giảng viên thành công!' }); else alert('Gỡ giảng viên thành công!');
+    } catch (err) {
+      console.error('REMOVE TEACHER ERROR', err);
+      const msg = err.response?.data?.message || err.message || 'Vui lòng thử lại.';
+      if (window.showGlobalPopup) window.showGlobalPopup({ type: 'error', message: 'Gỡ thất bại: ' + msg }); else alert('Gỡ thất bại: ' + msg);
+    }
+  };
   const openEditModal = (c) => { setEditingOriginal(c); setEditingCourse({ ...c }); setIsEditModalOpen(true); };
+  // clear edit form errors when opening edit modal
+  const openEditModalWithClear = (c) => { setEditingOriginal(c); setEditingCourse({ ...c }); setEditingCourseErrors({}); setIsEditModalOpen(true); };
   const handleUpdateCourse = async () => {
     if (!editingCourse || !editingCourse.courseId) return;
+
+    // validate editingCourse before submitting
+    const errors = await validateSchema(courseValidationSchema, editingCourse);
+    if (Object.keys(errors).length) {
+      setEditingCourseErrors(errors);
+      return;
+    }
+    setEditingCourseErrors({});
 
     try {
       // Gọi service cập nhật
@@ -223,10 +324,15 @@ const [lectureSearchTerm, setLectureSearchTerm] = useState(""); // [MỚI] Tìm 
       );
 
       setIsEditModalOpen(false);
-      alert("Cập nhật khóa học thành công!");
+      if (window.showGlobalPopup) window.showGlobalPopup({ type: 'success', message: 'Cập nhật khóa học thành công!' }); else alert('Cập nhật khóa học thành công!');
     } catch (err) {
       console.error(err);
-      alert("Lỗi cập nhật: " + err.message);
+      const fieldErrors = extractFieldErrorsFromApi(err);
+      if (Object.keys(fieldErrors).length) {
+        setEditingCourseErrors(fieldErrors);
+        return;
+      }
+      if (window.showGlobalPopup) window.showGlobalPopup({ type: 'error', message: 'Lỗi cập nhật: ' + err.message }); else alert('Lỗi cập nhật: ' + err.message);
     }
   };
 
@@ -244,7 +350,7 @@ const [lectureSearchTerm, setLectureSearchTerm] = useState(""); // [MỚI] Tìm 
       {/* Header, Toolbar, Views (Giữ nguyên UI) */}
       <div className="flex flex-col md:flex-row justify-between gap-4 mb-6">
         <div><h1 className="text-2xl font-bold text-gray-800">Quản lý Khóa học</h1><p className="text-gray-500 text-sm">Quản lý danh sách khóa học hệ thống.</p></div>
-        <button onClick={() => setIsCreateModalOpen(true)} className="flex items-center gap-2 px-5 py-2.5 bg-[#5a4d8c] text-white font-medium rounded-xl hover:bg-[#483d73] shadow-lg"><Plus size={20} /> Tạo khóa học</button>
+        <button onClick={openCreateModalCourse} className="flex items-center gap-2 px-5 py-2.5 bg-[#5a4d8c] text-white font-medium rounded-xl hover:bg-[#483d73] shadow-lg"><Plus size={20} /> Tạo khóa học</button>
       </div>
       <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 mb-6 flex flex-col lg:flex-row gap-4 justify-between items-center">
         <div className="relative flex-1 w-full lg:w-auto"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} /><input type="text" placeholder="Tìm tên khóa học..." className="w-full pl-10 pr-4 py-2.5 rounded-lg border text-sm focus:outline-none focus:border-[#5a4d8c]" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
@@ -273,7 +379,7 @@ const [lectureSearchTerm, setLectureSearchTerm] = useState(""); // [MỚI] Tìm 
                   </div>
                 ) : <div className="text-center text-xs text-gray-400 bg-gray-50 p-2 rounded mb-3">- Chưa gán GV -</div>}
                 <div className="grid grid-cols-3 gap-2 mt-auto text-xs font-medium">
-                  <button onClick={() => openEditModal(c)} className="py-2 bg-green-50 text-green-700 rounded hover:bg-green-100">Sửa</button>
+                    <button onClick={() => openEditModalWithClear(c)} className="py-2 bg-green-50 text-green-700 rounded hover:bg-green-100">Sửa</button>
                   <button onClick={() => handleDeleteCourse(c.courseId)} className="py-2 bg-red-50 text-red-700 rounded hover:bg-red-100">Xóa</button>
                   <button onClick={() => { setAssignCourseId(c.courseId); setIsAssignModalOpen(true) }} className="py-2 bg-blue-50 text-blue-700 rounded hover:bg-blue-100">Gán GV</button>
                 </div>
@@ -309,8 +415,9 @@ const [lectureSearchTerm, setLectureSearchTerm] = useState(""); // [MỚI] Tìm 
                         className="w-full border border-gray-300 p-2.5 rounded-lg focus:ring-2 focus:ring-[#5a4d8c]/50 outline-none" 
                         placeholder="Nhập tên khóa học..." 
                         value={newCourse.title} 
-                        onChange={e => setNewCourse({...newCourse, title: e.target.value})} 
+                        onChange={e => { setNewCourse({...newCourse, title: e.target.value}); setNewCourseErrors(prev=>({...prev, title: undefined})); }} 
                     />
+                    {newCourseErrors.title && <p className="text-xs text-red-500 mt-1">{newCourseErrors.title}</p>}
                  </div>
 
                  {/* Slug */}
@@ -320,8 +427,9 @@ const [lectureSearchTerm, setLectureSearchTerm] = useState(""); // [MỚI] Tìm 
                         className="w-full border border-gray-300 p-2.5 rounded-lg bg-gray-50 text-sm" 
                         placeholder="tu-dong-tao-neu-de-trong" 
                         value={newCourse.slug} 
-                        onChange={e => setNewCourse({...newCourse, slug: e.target.value})} 
+                        onChange={e => { setNewCourse({...newCourse, slug: e.target.value}); setNewCourseErrors(prev=>({...prev, slug: undefined})); }} 
                     />
+                    {newCourseErrors.slug && <p className="text-xs text-red-500 mt-1">{newCourseErrors.slug}</p>}
                  </div>
 
                  {/* Short Description */}
@@ -331,8 +439,9 @@ const [lectureSearchTerm, setLectureSearchTerm] = useState(""); // [MỚI] Tìm 
                         className="w-full border border-gray-300 p-2.5 rounded-lg h-20 text-sm focus:ring-2 focus:ring-[#5a4d8c]/50 outline-none" 
                         placeholder="Giới thiệu sơ lược về khóa học..." 
                         value={newCourse.shortDescription} 
-                        onChange={e => setNewCourse({...newCourse, shortDescription: e.target.value})} 
+                        onChange={e => { setNewCourse({...newCourse, shortDescription: e.target.value}); setNewCourseErrors(prev=>({...prev, shortDescription: undefined})); }} 
                     />
+                    {newCourseErrors.shortDescription && <p className="text-xs text-red-500 mt-1">{newCourseErrors.shortDescription}</p>}
                  </div>
 
                  {/* Full Description */}
@@ -342,8 +451,9 @@ const [lectureSearchTerm, setLectureSearchTerm] = useState(""); // [MỚI] Tìm 
                         className="w-full border border-gray-300 p-2.5 rounded-lg h-28 text-sm focus:ring-2 focus:ring-[#5a4d8c]/50 outline-none" 
                         placeholder="Nội dung chi tiết..." 
                         value={newCourse.description} 
-                        onChange={e => setNewCourse({...newCourse, description: e.target.value})} 
+                        onChange={e => { setNewCourse({...newCourse, description: e.target.value}); setNewCourseErrors(prev=>({...prev, description: undefined})); }} 
                     />
+                    {newCourseErrors.description && <p className="text-xs text-red-500 mt-1">{newCourseErrors.description}</p>}
                  </div>
                  {/* [MỚI] Published Checkbox */}
                  <div className="pt-2">
@@ -392,8 +502,9 @@ const [lectureSearchTerm, setLectureSearchTerm] = useState(""); // [MỚI] Tìm 
                 <input 
                   className="w-full border border-gray-300 p-2.5 rounded-lg focus:ring-2 focus:ring-[#5a4d8c]/50 outline-none" 
                   value={editingCourse.title} 
-                  onChange={e => setEditingCourse({...editingCourse, title: e.target.value})}
+                  onChange={e => { setEditingCourse({...editingCourse, title: e.target.value}); setEditingCourseErrors(prev=>({...prev, title: undefined})); }}
                 />
+                {editingCourseErrors.title && <p className="text-xs text-red-500 mt-1">{editingCourseErrors.title}</p>}
               </div>
 
               {/* Slug */}
@@ -402,8 +513,9 @@ const [lectureSearchTerm, setLectureSearchTerm] = useState(""); // [MỚI] Tìm 
                 <input 
                   className="w-full border border-gray-300 p-2.5 rounded-lg bg-gray-50 text-sm" 
                   value={editingCourse.slug} 
-                  onChange={e => setEditingCourse({...editingCourse, slug: e.target.value})}
+                  onChange={e => { setEditingCourse({...editingCourse, slug: e.target.value}); setEditingCourseErrors(prev=>({...prev, slug: undefined})); }}
                 />
+                {editingCourseErrors.slug && <p className="text-xs text-red-500 mt-1">{editingCourseErrors.slug}</p>}
               </div>
 
               {/* Mô tả ngắn */}
@@ -412,8 +524,9 @@ const [lectureSearchTerm, setLectureSearchTerm] = useState(""); // [MỚI] Tìm 
                 <textarea 
                   className="w-full border border-gray-300 p-2.5 rounded-lg h-20 text-sm focus:ring-2 focus:ring-[#5a4d8c]/50 outline-none" 
                   value={editingCourse.shortDescription || ""} 
-                  onChange={e => setEditingCourse({...editingCourse, shortDescription: e.target.value})}
+                  onChange={e => { setEditingCourse({...editingCourse, shortDescription: e.target.value}); setEditingCourseErrors(prev=>({...prev, shortDescription: undefined})); }}
                 />
+                {editingCourseErrors.shortDescription && <p className="text-xs text-red-500 mt-1">{editingCourseErrors.shortDescription}</p>}
               </div>
 
               {/* Mô tả chi tiết */}
@@ -422,8 +535,9 @@ const [lectureSearchTerm, setLectureSearchTerm] = useState(""); // [MỚI] Tìm 
                 <textarea 
                   className="w-full border border-gray-300 p-2.5 rounded-lg h-28 text-sm focus:ring-2 focus:ring-[#5a4d8c]/50 outline-none" 
                   value={editingCourse.description || ""} 
-                  onChange={e => setEditingCourse({...editingCourse, description: e.target.value})}
+                  onChange={e => { setEditingCourse({...editingCourse, description: e.target.value}); setEditingCourseErrors(prev=>({...prev, description: undefined})); }}
                 />
+                {editingCourseErrors.description && <p className="text-xs text-red-500 mt-1">{editingCourseErrors.description}</p>}
               </div>
 
             

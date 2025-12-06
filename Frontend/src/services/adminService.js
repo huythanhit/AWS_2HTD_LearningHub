@@ -1,5 +1,22 @@
-// src/services/adminService.js
+
 import apiClient from "./https";
+
+// Normalize axios/network errors so callers can inspect `err.data` reliably.
+function normalizeAndThrow(err) {
+    try {
+        if (!err) throw err;
+
+        if (err.response && err.response.data) {
+
+            err.data = err.response.data;
+
+            if (err.response.data.message) err.message = err.response.data.message;
+        }
+    } catch (e) {
+        // ignore normalization errors
+    }
+    throw err;
+}
 
 export async function getAdminUsers(page = 1, limit = 10) {
     try {
@@ -16,7 +33,7 @@ export async function getAdminUsers(page = 1, limit = 10) {
         };
 
     } catch (err) {
-        throw err;
+        normalizeAndThrow(err);
     }
 }
 // CREATE USER (Admin)
@@ -31,7 +48,7 @@ export async function createUser(payload) {
 
         return result.data; // backend trả user vừa tạo
     } catch (err) {
-        throw err;
+        normalizeAndThrow(err);
     }
 }
 // UPDATE USER
@@ -46,7 +63,7 @@ export async function updateUser(userId, payload) {
 
         return result.data;
     } catch (err) {
-        throw err;
+        normalizeAndThrow(err);
     }
 }
 // DELETE USER
@@ -59,9 +76,9 @@ export async function deleteUser(userId) {
             throw new Error(result.message || "Delete user failed");
         }
 
-        return result.data; // backend trả message hoặc thông tin user vừa xóa
+        return result.data;
     } catch (err) {
-        throw err;
+        normalizeAndThrow(err);
     }
 }
 // RESTORE USER
@@ -76,7 +93,7 @@ export async function restoreUser(userId) {
 
         return result.data; // backend trả user đã restore
     } catch (err) {
-        throw err;
+        normalizeAndThrow(err);
     }
 }
 // GET LIST DELETED USERS
@@ -96,10 +113,10 @@ export async function getDeletedUsers() {
 // --- [MỚI] LẤY FULL LIST KHÓA HỌC CHO ADMIN (Bao gồm Draft) ---
 export async function getAdminCourses() {
     try {
-        // Gọi endpoint admin để lấy cả bản nháp (Draft)
+
         // Dùng apiClient để tự động gửi kèm Token Authorization
         const res = await apiClient.get("/api/admin/courses");
-        
+
         const data = res.data;
 
         // Xử lý các trường hợp format dữ liệu trả về khác nhau của backend
@@ -115,12 +132,12 @@ export async function getAdminCourses() {
         try {
             const resFallback = await apiClient.get("/api/courses?page=1&pageSize=100");
             const data = resFallback.data;
-             if (Array.isArray(data)) return data;
-             if (data && Array.isArray(data.courses)) return data.courses;
-             return [];
+            if (Array.isArray(data)) return data;
+            if (data && Array.isArray(data.courses)) return data.courses;
+            return [];
         } catch (e2) {
             console.error("GET ADMIN COURSES ERROR:", err);
-            throw err;
+            normalizeAndThrow(err);
         }
     }
 }
@@ -129,10 +146,10 @@ export async function getAdminCourses() {
 export async function getCourses(page = 1, pageSize = 20) {
     try {
         const res = await apiClient.get(`/api/courses?page=${page}&pageSize=${pageSize}`);
-        return res.data;   // backend trả thẳng list courses
+        return res.data;
     } catch (err) {
         console.error("GET COURSES ERROR:", err);
-        throw err;
+        normalizeAndThrow(err);
     }
 }
 // CREATE COURSE
@@ -141,16 +158,16 @@ export async function createCourse(data) {
         const res = await apiClient.post("/api/admin/courses", data);
         const result = res.data;
 
-        // Response mẫu: { "message": "Course created", "course": { ... } }
+
         if (!result.course) {
-             // Fallback nếu API trả về lỗi hoặc cấu trúc khác
+
             throw new Error(result.message || "Create course failed");
         }
 
-        return result.course; // Chỉ trả về object course để UI sử dụng
+        return result.course;
     } catch (err) {
         console.error("CREATE COURSE ERROR:", err);
-        throw err;
+        normalizeAndThrow(err);
     }
 }
 // DELETE COURSE (Admin)
@@ -163,10 +180,10 @@ export async function deleteCourse(courseId) {
             throw new Error(result.message || "Delete course failed");
         }
 
-        return result; // backend trả { message, courseId }
+        return result;
     } catch (err) {
         console.error("DELETE COURSE ERROR RAW:", err);
-        throw err;
+        normalizeAndThrow(err);
     }
 }
 // ASSIGN TEACHER TO COURSE
@@ -179,10 +196,10 @@ export async function assignTeacherToCourse(courseId, teacherId) {
             throw new Error(result.message || "Assign teacher failed");
         }
 
-        return result.assignment; // backend trả object assignment {courseId, teacherId}
+        return result.assignment;
     } catch (err) {
         console.error("ASSIGN TEACHER ERROR:", err);
-        throw err;
+        normalizeAndThrow(err);
     }
 }
 // REMOVE TEACHER FROM COURSE
@@ -195,10 +212,10 @@ export async function removeTeacherFromCourse(courseId, teacherId) {
             throw new Error(result.message || "Remove teacher failed");
         }
 
-        return result; // backend trả { message, courseId, teacherId }
+        return result;
     } catch (err) {
         console.error("REMOVE TEACHER ERROR:", err);
-        throw err;
+        normalizeAndThrow(err);
     }
 }
 // [MỚI] GET COURSE DETAILS (Bao gồm chapters/lessons)
@@ -206,10 +223,10 @@ export async function getCourseById(courseId) {
     try {
         const res = await apiClient.get(`/api/courses/${courseId}`);
         const result = res.data;
-        return result.data || result; 
+        return result.data || result;
     } catch (err) {
         console.error("GET COURSE DETAIL ERROR:", err);
-        throw err;
+        normalizeAndThrow(err);
     }
 }
 // [MỚI] GET TEACHERS ASSIGNED TO A COURSE
@@ -231,7 +248,6 @@ export async function getCourseTeachers(courseId) {
 // edit COURSE (Admin)
 export async function updateCourse(courseId, data) {
     try {
-        // URL: patch: http://localhost:4000/api/admin/courses/{{courseId}}
         const res = await apiClient.patch(`/api/admin/courses/${courseId}`, data);
         const result = res.data;
 
@@ -243,45 +259,38 @@ export async function updateCourse(courseId, data) {
         return result.course; // Trả về object course đã được update
     } catch (err) {
         console.error("UPDATE COURSE ERROR:", err);
-        throw err;
+        normalizeAndThrow(err);
     }
 }
 // [CẬP NHẬT] LẤY DANH SÁCH BÀI GIẢNG (Chi tiết theo teacher & course)
 export async function getTeacherCourseLectures(teacherId, courseId) {
     try {
-        // Url: /api/admin/teachers/{{teacherId}}/courses/{{courseId}}/lectures
+
         const res = await apiClient.get(`/api/admin/teachers/${teacherId}/courses/${courseId}/lectures`);
-        
-        // API trả về object: { courseId, teacherId, total, lectures: [...] }
-        return res.data; 
+        return res.data;
     } catch (err) {
         console.error("GET TEACHER COURSE LECTURES ERROR:", err);
-        throw err;
+        normalizeAndThrow(err);
     }
 }
 // [MỚI] UPDATE LECTURE
 export async function updateCourseLecture(courseId, lectureId, payload) {
     try {
-        // URL: /api/admin/courses/{{courseId}}/lectures/{{lectureId}}
         const res = await apiClient.patch(`/api/admin/courses/${courseId}/lectures/${lectureId}`, payload);
-        
-        // API trả về: { message: "Lecture updated", lecture: { ... } }
-        return res.data; 
+
+        return res.data;
     } catch (err) {
         console.error("UPDATE LECTURE ERROR:", err);
-        throw err;
+        normalizeAndThrow(err);
     }
 }
 // [MỚI] DELETE LECTURE
 export async function deleteCourseLecture(courseId, lectureId) {
     try {
-        // URL: delete: http://localhost:4000/api/admin/courses/{{courseId}}/lectures/{{lectureId}}
         const res = await apiClient.delete(`/api/admin/courses/${courseId}/lectures/${lectureId}`);
-        
-        // API trả về: { message: "Lecture deleted", lectureId: "..." }
         return res.data;
     } catch (err) {
         console.error("DELETE LECTURE ERROR:", err);
-        throw err;
+        normalizeAndThrow(err);
     }
 }

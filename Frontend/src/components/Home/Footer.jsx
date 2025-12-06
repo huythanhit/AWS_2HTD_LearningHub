@@ -70,16 +70,14 @@ const Footer = () => {
 
                             <li><a href="#" className="hover:text-white hover:underline decoration-white underline-offset-2 transition duration-300">Giới thiệu</a></li>
                             <li><a href="#" className="hover:text-white hover:underline decoration-white underline-offset-2 transition duration-300">Chính sách bảo mật</a></li>
-                            <li><a href="#" className="hover:text-white hover:underline decoration-white underline-offset-2 transition duration-300">Điều khoản dịch vụ</a></li>
-                            <li><a href="#" className="hover:text-white hover:underline decoration-white underline-offset-2 transition duration-300">Cơ hội nghề nghiệp</a></li>
 
                         </ul>
                     </div>
 
-                    {/* Cột 4: Địa chỉ & Đối tác */}
+                    {/* Cột 4: Địa Chỉ */}
                     <div>
                         <h5 className="text-lg font-bold text-white mb-6 relative pb-3">
-                            Địa Chỉ & Đối Tác
+                            Địa Chỉ
                             <span className="block w-10 h-1 absolute left-0 bottom-0 rounded-full" style={{ backgroundColor: primaryColorHex }}></span>
                         </h5>
 
@@ -89,16 +87,6 @@ const Footer = () => {
                                 Tầng 10, Tòa nhà L.H, Quận 1, TP. Hồ Chí Minh, Việt Nam.
                             </span>
                         </p>
-                        <div className="flex space-x-4">
-                            <img
-                                src="https://placehold.co/100x40/5e4d7a/ffffff?text=Partner1"
-                                className="h-10 opacity-80 transition duration-300 grayscale hover:opacity-100 hover:grayscale-0 rounded-md"
-                            />
-                            <img
-                                src="https://placehold.co/100x40/5e4d7a/ffffff?text=Partner2"
-                                className="h-10 opacity-80 transition duration-300 grayscale hover:opacity-100 hover:grayscale-0 rounded-md"
-                            />
-                        </div>
                     </div>
                 </div>
             </div>

@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
-    Users, BookOpen, GraduationCap, Activity, 
-    TrendingUp, Calendar, 
-    ArrowUpRight, ArrowDownRight, Filter
+    Users, BookOpen, GraduationCap, Calendar, 
+    ArrowUpRight, ArrowDownRight, ChevronLeft, ChevronRight
 } from 'lucide-react';
 
 // [FIX] Sửa lại tên hàm import đúng với adminService.js (getAdminCourses thay vì getCourses)
@@ -88,10 +87,23 @@ export default function AdminDashboard() {
     const [stats, setStats] = useState({
         totalUsers: 0,
         totalCourses: 0,
-        totalTeachers: 0, 
-        totalRevenue: 0 
+        totalTeachers: 0
     });
     const [loading, setLoading] = useState(true);
+
+    // Selected month for the dashboard (editable via prev/next)
+    const [selectedDate, setSelectedDate] = useState(new Date());
+    const monthLabel = `Tháng ${selectedDate.getMonth() + 1}/${selectedDate.getFullYear()}`;
+
+    const prevMonth = () => {
+        const d = new Date(selectedDate.getFullYear(), selectedDate.getMonth() - 1, 1);
+        setSelectedDate(d);
+    };
+
+    const nextMonth = () => {
+        const d = new Date(selectedDate.getFullYear(), selectedDate.getMonth() + 1, 1);
+        setSelectedDate(d);
+    };
 
    useEffect(() => {
         async function fetchDashboardData() {
@@ -128,8 +140,7 @@ export default function AdminDashboard() {
                 setStats({
                     totalUsers: totalUsers,
                     totalCourses: totalCourses,
-                    totalTeachers: teachersList.length,
-                    totalRevenue: 125000000 
+                    totalTeachers: teachersList.length
                 });
 
             } catch (error) {
@@ -149,8 +160,7 @@ export default function AdminDashboard() {
             change: "+12%", 
             trend: "up", 
             icon: Users, 
-            color: "text-blue-600", 
-            bg: "bg-blue-50" 
+            color: "text-gray-700"
         },
         { 
             title: "Tổng Khóa Học", 
@@ -158,8 +168,7 @@ export default function AdminDashboard() {
             change: "+5%", 
             trend: "up", 
             icon: BookOpen, 
-            color: "text-purple-600", 
-            bg: "bg-purple-50" 
+            color: "text-gray-700"
         },
         { 
             title: "Giảng Viên", 
@@ -167,17 +176,7 @@ export default function AdminDashboard() {
             change: "+2", 
             trend: "up", 
             icon: GraduationCap, 
-            color: "text-emerald-600", 
-            bg: "bg-emerald-50" 
-        },
-        { 
-            title: "Doanh Thu", 
-            value: loading ? "..." : `${(stats.totalRevenue / 1000000).toFixed(1)}M`,
-            change: "+8.5%", 
-            trend: "up", 
-            icon: Activity, 
-            color: "text-orange-600", 
-            bg: "bg-orange-50" 
+            color: "text-gray-700"
         }
     ];
 
@@ -193,20 +192,21 @@ export default function AdminDashboard() {
                 </div>
                 
                 <div className="flex gap-3 mt-4 md:mt-0">
-                    <button className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-600 rounded-xl hover:bg-gray-50 transition shadow-sm font-medium text-sm">
+                    <div className="flex items-center gap-2 px-3 py-2 bg-white border border-gray-200 text-gray-600 rounded-xl transition shadow-sm font-medium text-sm">
+                        <button onClick={prevMonth} aria-label="Tháng trước" className="p-1 rounded hover:bg-gray-100">
+                            <ChevronLeft size={16} />
+                        </button>
                         <Calendar size={18} />
-                        <span>Tháng này</span>
-                        <ChevronDownIcon />
-                    </button>
-                    <button className="flex items-center gap-2 px-4 py-2 bg-[#5a4d8c] text-white rounded-xl hover:bg-[#483d73] transition shadow-lg shadow-indigo-200 font-medium text-sm">
-                        <Filter size={18} />
-                        <span>Tùy chỉnh</span>
-                    </button>
+                        <span className="font-medium px-2">{monthLabel}</span>
+                        <button onClick={nextMonth} aria-label="Tháng sau" className="p-1 rounded hover:bg-gray-100">
+                            <ChevronRight size={16} />
+                        </button>
+                    </div>
                 </div>
             </div>
 
             {/* STAT CARDS */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-10">
                 {statCards.map((item, index) => (
                     <div 
                         key={index} 
@@ -214,7 +214,7 @@ export default function AdminDashboard() {
                         style={{ animationDelay: `${index * 100}ms` }}
                     >
                         <div className="flex justify-between items-start mb-4">
-                            <div className={`p-3 rounded-xl ${item.bg}`}>
+                            <div className="p-3 rounded-xl bg-white border border-gray-100">
                                 <item.icon className={item.color} size={24} />
                             </div>
                             {item.change && (
@@ -277,9 +277,4 @@ export default function AdminDashboard() {
     );
 }
 
-// Icon helper nhỏ
-const ChevronDownIcon = () => (
-    <svg width="10" height="6" viewBox="0 0 10 6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M1 1L5 5L9 1" />
-    </svg>
-);
+// Removed unused chevron helper — month control uses lucide chevrons now

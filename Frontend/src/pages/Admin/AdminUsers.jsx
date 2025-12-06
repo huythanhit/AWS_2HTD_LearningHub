@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
     Plus, Edit, Trash2, Mail, Phone,
     X, Save, RefreshCcw
@@ -12,6 +12,7 @@ import {
     deleteUser, 
     restoreUser 
 } from "../../services/adminService";
+import { userValidationSchema, validateSchema } from "../../validation/adminValidators";
 
 export default function AdminUsers() {
 
@@ -29,6 +30,12 @@ export default function AdminUsers() {
     const [tab, setTab] = useState("active");
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [currentUser, setCurrentUser] = useState(null);
+    const [userErrors, setUserErrors] = useState({});
+    const fullNameRef = useRef(null);
+    const emailRef = useRef(null);
+    const phoneRef = useRef(null);
+    const passwordRef = useRef(null);
+    const roleRef = useRef(null);
 
     const [searchText, setSearchText] = useState("");
     const [filterRole, setFilterRole] = useState("all");
@@ -68,6 +75,7 @@ export default function AdminUsers() {
             password: "",
             role: "member"
         });
+        setUserErrors({});
         setIsModalOpen(true);
     };
 
@@ -81,11 +89,94 @@ export default function AdminUsers() {
             role: u.role_name.toLowerCase(),
             password: ""
         });
+        setUserErrors({});
         setIsModalOpen(true);
     };
 
     // --- SAVE USER ---
+    function extractFieldErrorsFromApi(err) {
+        const data = err?.data || err?.response?.data;
+        const out = {};
+        if (!data) return out;
+
+        // Common API shapes: { errors: { field: ["msg"] } }
+        if (data.errors && typeof data.errors === 'object') {
+            Object.entries(data.errors).forEach(([k, v]) => {
+                if (Array.isArray(v)) out[k] = v.join(' ');
+                else if (typeof v === 'string') out[k] = v;
+            });
+            return out;
+        }
+
+        // Another possible shape: { message: 'Validation error', details: { field: 'msg' } }
+        if (data.details && typeof data.details === 'object') {
+            Object.entries(data.details).forEach(([k, v]) => { out[k] = typeof v === 'string' ? v : JSON.stringify(v); });
+            return out;
+        }
+
+        return out;
+    }
+
     const handleSaveUser = async () => {
+        // Basic client-side required checks first (prevents hitting API and showing generic popup)
+        const reqErrors = {};
+        const isCreate = !currentUser?.id;
+        if (isCreate) {
+            if (!currentUser.full_name || !currentUser.full_name.toString().trim()) reqErrors.full_name = 'Vui lòng nhập họ và tên';
+            if (!currentUser.email || !currentUser.email.toString().trim()) reqErrors.email = 'Vui lòng nhập email';
+            if (!currentUser.phone || !currentUser.phone.toString().trim()) reqErrors.phone = 'Vui lòng nhập số điện thoại';
+            if (!currentUser.password || !currentUser.password.toString().trim()) reqErrors.password = 'Vui lòng nhập mật khẩu';
+            if (!currentUser.role || !currentUser.role.toString().trim()) reqErrors.role = 'Vui lòng chọn role';
+        } else {
+            // for updates, only basic checks for fields that are present
+            if (currentUser.full_name === undefined || currentUser.full_name === null || currentUser.full_name.toString().trim() === '') reqErrors.full_name = 'Vui lòng nhập họ và tên';
+        }
+
+        if (Object.keys(reqErrors).length) {
+            setUserErrors(reqErrors);
+            // focus first invalid field
+            const order = ['full_name', 'email', 'phone', 'password', 'role'];
+            const firstKey = order.find(k => reqErrors[k]);
+            const refMap = {
+                full_name: fullNameRef,
+                email: emailRef,
+                phone: phoneRef,
+                password: passwordRef,
+                role: roleRef
+            };
+            if (firstKey && refMap[firstKey] && refMap[firstKey].current) {
+                // small timeout to ensure modal is rendered/focusable
+                setTimeout(() => {
+                    try { refMap[firstKey].current.focus(); } catch (e) { /* ignore */ }
+                }, 10);
+            }
+            return;
+        }
+
+        // run schema validation (for more complex rules) and map errors if any
+        const errors = await validateSchema(userValidationSchema, currentUser, { isCreate });
+        if (Object.keys(errors).length) {
+            setUserErrors(errors);
+            // focus first invalid field
+            const order = ['full_name', 'email', 'phone', 'password', 'role'];
+            const firstKey = order.find(k => errors[k]);
+            const refMap = {
+                full_name: fullNameRef,
+                email: emailRef,
+                phone: phoneRef,
+                password: passwordRef,
+                role: roleRef
+            };
+            if (firstKey && refMap[firstKey] && refMap[firstKey].current) {
+                // small timeout to ensure modal is rendered/focusable
+                setTimeout(() => {
+                    try { refMap[firstKey].current.focus(); } catch (e) { /* ignore */ }
+                }, 10);
+            }
+            return;
+        }
+        setUserErrors({});
+
         try {
             if (!currentUser.id) {
                 const payload = {
@@ -107,34 +198,68 @@ export default function AdminUsers() {
             setIsModalOpen(false);
             await loadActiveUsers();
             await loadDeletedUsers();
+            // show success popup after create/update
+            if (window.showGlobalPopup) {
+                window.showGlobalPopup({ type: 'success', message: currentUser.id ? 'Cập nhật user thành công!' : 'Tạo user thành công!' });
+            } else {
+                alert(currentUser.id ? 'Cập nhật user thành công!' : 'Tạo user thành công!');
+            }
         } catch (err) {
-            alert("Lỗi: " + err.message);
+            // Try to map server-side validation errors into inline field errors
+            const apiErrors = extractFieldErrorsFromApi(err);
+            // Map API field names to client field names if necessary
+            const mapped = {};
+            Object.entries(apiErrors).forEach(([k, v]) => {
+                let field = k;
+                if (k === 'fullName' || k === 'full_name') field = 'full_name';
+                if (k === 'password') field = 'password';
+                if (k === 'role') field = 'role';
+                if (k === 'email') field = 'email';
+                if (k === 'phone') field = 'phone';
+                mapped[field] = v;
+            });
+
+            if (Object.keys(mapped).length) {
+                setUserErrors(mapped);
+                // focus first invalid
+                const order = ['full_name', 'email', 'phone', 'password', 'role'];
+                const firstKey = order.find(k => mapped[k]);
+                const refMap = { full_name: fullNameRef, email: emailRef, phone: phoneRef, password: passwordRef, role: roleRef };
+                if (firstKey && refMap[firstKey] && refMap[firstKey].current) {
+                    setTimeout(() => { try { refMap[firstKey].current.focus(); } catch(e){} }, 10);
+                }
+                return;
+            }
+
+            if (window.showGlobalPopup) window.showGlobalPopup({ type: 'error', message: 'Lỗi: ' + err.message }); else alert('Lỗi: ' + err.message);
         }
     };
 
     // --- DELETE USER ---
     const handleDeleteUser = async (userId) => {
-        if (!window.confirm("Bạn có chắc chắn muốn xóa user này không?")) return;
+        const ok = window.showGlobalConfirm ? await window.showGlobalConfirm("Bạn có chắc chắn muốn xóa user này không?") : window.confirm("Bạn có chắc chắn muốn xóa user này không?");
+        if (!ok) return;
         try {
             await deleteUser(userId);
-            alert("Xóa user thành công!");
+            if (window.showGlobalPopup) window.showGlobalPopup({ type: 'success', message: 'Xóa user thành công!' }); else alert('Xóa user thành công!');
             await loadActiveUsers();
             await loadDeletedUsers();
         } catch (err) {
-            alert("Lỗi khi xóa user: " + err.message);
+            if (window.showGlobalPopup) window.showGlobalPopup({ type: 'error', message: 'Lỗi khi xóa user: ' + err.message }); else alert('Lỗi khi xóa user: ' + err.message);
         }
     };
 
     // --- RESTORE USER ---
     const handleRestoreUser = async (userId) => {
-        if (!window.confirm("Khôi phục tài khoản này?")) return;
+        const ok = window.showGlobalConfirm ? await window.showGlobalConfirm("Khôi phục tài khoản này?") : window.confirm("Khôi phục tài khoản này?");
+        if (!ok) return;
         try {
             await restoreUser(userId);
-            alert("Khôi phục user thành công!");
+            if (window.showGlobalPopup) window.showGlobalPopup({ type: 'success', message: 'Khôi phục user thành công!' }); else alert('Khôi phục user thành công!');
             await loadActiveUsers();
             await loadDeletedUsers();
         } catch (err) {
-            alert("Lỗi khi khôi phục user: " + err.message);
+            if (window.showGlobalPopup) window.showGlobalPopup({ type: 'error', message: 'Lỗi khi khôi phục user: ' + err.message }); else alert('Lỗi khi khôi phục user: ' + err.message);
         }
     };
 
@@ -266,7 +391,6 @@ export default function AdminUsers() {
                     onChange={(e) => { setFilterRole(e.target.value); setPage(1); setPageDeleted(1); }}
                 >
                     <option value="all">Tất cả role</option>
-                    <option value="admin">Admin</option>
                     <option value="teacher">Teacher</option>
                     <option value="member">Member</option>
                 </select>
@@ -360,31 +484,40 @@ export default function AdminUsers() {
                                 <label className="block text-xs font-bold mb-1">Họ và tên</label>
                                 <input 
                                     type="text"
-                                    className="w-full px-3 py-2 rounded-lg border"
+                                    aria-invalid={!!userErrors.full_name}
+                                    ref={fullNameRef}
+                                    className={`w-full px-3 py-2 rounded-lg ${userErrors.full_name ? 'border-red-300 ring-1 ring-red-300' : 'border'}`}
                                     value={currentUser.full_name}
-                                    onChange={(e)=>setCurrentUser({...currentUser, full_name:e.target.value})}
+                                    onChange={(e)=>{ setCurrentUser({...currentUser, full_name:e.target.value}); setUserErrors(prev=>({...prev, full_name: undefined})); }}
                                 />
+                                {userErrors.full_name && <p className="text-xs text-red-500 mt-1">{userErrors.full_name}</p>}
                             </div>
 
                             <div>
                                 <label className="block text-xs font-bold mb-1">Email</label>
                                 <input 
                                     type="email"
-                                    className="w-full px-3 py-2 rounded-lg border"
+                                    aria-invalid={!!userErrors.email}
+                                    ref={emailRef}
+                                    className={`w-full px-3 py-2 rounded-lg ${userErrors.email ? 'border-red-300 ring-1 ring-red-300' : 'border'}`}
                                     value={currentUser.email}
-                                    onChange={(e)=>setCurrentUser({...currentUser, email:e.target.value})}
+                                    onChange={(e)=>{ setCurrentUser({...currentUser, email:e.target.value}); setUserErrors(prev=>({...prev, email: undefined})); }}
                                     disabled={currentUser.id}
                                 />
+                                {userErrors.email && <p className="text-xs text-red-500 mt-1">{userErrors.email}</p>}
                             </div>
 
                             <div>
                                 <label className="block text-xs font-bold mb-1">Số điện thoại</label>
                                 <input 
                                     type="text"
-                                    className="w-full px-3 py-2 rounded-lg border"
+                                    aria-invalid={!!userErrors.phone}
+                                    ref={phoneRef}
+                                    className={`w-full px-3 py-2 rounded-lg ${userErrors.phone ? 'border-red-300 ring-1 ring-red-300' : 'border'}`}
                                     value={currentUser.phone}
-                                    onChange={(e)=>setCurrentUser({...currentUser, phone:e.target.value})}
+                                    onChange={(e)=>{ setCurrentUser({...currentUser, phone:e.target.value}); setUserErrors(prev=>({...prev, phone: undefined})); }}
                                 />
+                                {userErrors.phone && <p className="text-xs text-red-500 mt-1">{userErrors.phone}</p>}
                             </div>
 
                             {!currentUser.id && (
@@ -392,23 +525,29 @@ export default function AdminUsers() {
                                     <label className="block text-xs font-bold mb-1">Mật khẩu</label>
                                     <input 
                                         type="password"
-                                        className="w-full px-3 py-2 rounded-lg border"
+                                        aria-invalid={!!userErrors.password}
+                                        ref={passwordRef}
+                                        className={`w-full px-3 py-2 rounded-lg ${userErrors.password ? 'border-red-300 ring-1 ring-red-300' : 'border'}`}
                                         value={currentUser.password}
-                                        onChange={(e)=>setCurrentUser({...currentUser, password:e.target.value})}
+                                        onChange={(e)=>{ setCurrentUser({...currentUser, password:e.target.value}); setUserErrors(prev=>({...prev, password: undefined})); }}
                                     />
+                                    {userErrors.password && <p className="text-xs text-red-500 mt-1">{userErrors.password}</p>}
                                 </div>
                             )}
 
                             <div>
                                 <label className="block text-xs font-bold mb-1">Role</label>
                                 <select 
-                                    className="w-full px-3 py-2 rounded-lg border"
+                                    ref={roleRef}
+                                    aria-invalid={!!userErrors.role}
+                                    className={`w-full px-3 py-2 rounded-lg ${userErrors.role ? 'border-red-300 ring-1 ring-red-300' : 'border'}`}
                                     value={currentUser.role}
-                                    onChange={(e)=>setCurrentUser({...currentUser, role:e.target.value})}
+                                    onChange={(e)=>{ setCurrentUser({...currentUser, role:e.target.value}); setUserErrors(prev=>({...prev, role: undefined})); }}
                                 >
                                     <option value="teacher">Teacher</option>
                                     <option value="member">Member</option>
                                 </select>
+                                {userErrors.role && <p className="text-xs text-red-500 mt-1">{userErrors.role}</p>}
                             </div>
                         </div>
 

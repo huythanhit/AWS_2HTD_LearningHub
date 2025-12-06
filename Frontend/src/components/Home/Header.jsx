@@ -13,7 +13,6 @@ export default function Header({ primaryColor = 'text-purple-800', primaryBg = '
         { label: "Home", to: "/" },
         { label: "Khóa học", to: "/", target: "khoa-hoc" },
         { label: "Luyện đề", to: "/", target: "luyen-de" },
-        { label: "Test đầu vào", to: "/", target: "test-dau-vao" },
         { label: "Lộ trình học", to: "/", target: "lo-trinh" } // <-- changed
     ];
 

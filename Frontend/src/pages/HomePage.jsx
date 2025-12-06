@@ -1,5 +1,6 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 
 export default function HomePage() {
     const primaryColor = 'text-[#5a4d8c]';
@@ -8,6 +9,7 @@ export default function HomePage() {
     const lightBg = 'bg-[#f0eaf9]';
 
     const location = useLocation();
+    const navigate = useNavigate();
 
     const courses = [
         {
@@ -19,7 +21,6 @@ export default function HomePage() {
             duration: "12 tuần",
             students: "2,450+",
             rating: 4.8,
-            price: "1,200,000₫",
             features: ["Đề thi chuẩn", "Giáo viên native", "Certificate"]
         },
         {
@@ -31,7 +32,6 @@ export default function HomePage() {
             duration: "8 tuần",
             students: "1,820+",
             rating: 4.7,
-            price: "900,000₫",
             features: ["Kỹ năng CV", "Interview prep", "Networking"]
         },
         {
@@ -43,7 +43,6 @@ export default function HomePage() {
             duration: "10 tuần",
             students: "1,650+",
             rating: 4.6,
-            price: "1,000,000₫",
             features: ["Đề Toeic", "Luyện nghe", "Giải thích chi tiết"]
         }
     ];
@@ -115,6 +114,20 @@ export default function HomePage() {
         }
     }, [location]);
 
+    // Course modal state
+    const [selectedCourse, setSelectedCourse] = useState(null);
+    const [showCourseModal, setShowCourseModal] = useState(false);
+
+    const openCourse = (course) => {
+        setSelectedCourse(course);
+        setShowCourseModal(true);
+    };
+
+    const closeCourse = () => {
+        setShowCourseModal(false);
+        setSelectedCourse(null);
+    };
+
     return (
         <div className={`min-h-screen ${lightestBg} font-sans`}>
 
@@ -130,12 +143,14 @@ export default function HomePage() {
                         <p className="text-lg text-gray-600 mb-8 max-w-md mx-auto md:mx-0">
                             Trang bị kiến thức toàn diện, luyện đề chuẩn quốc tế giúp bạn đạt mục tiêu tiếng Anh nhanh nhất.
                         </p>
-                        <a
-                            href="#"
+                        <button
+                            type="button"
+                            onClick={(e) => { e.preventDefault(); scrollToId('khoa-hoc'); }}
                             className={`inline-block py-3 px-8 ${primaryBg} text-white text-lg font-bold rounded-xl hover:bg-[#7a6acd] transition duration-300 shadow-lg shadow-indigo-300/50`}
+                            aria-label="Khám Phá Khóa Học"
                         >
                             Khám Phá Khóa Học
-                        </a>
+                        </button>
                     </div>
 
                     <div className="md:w-5/12 max-w-sm sm:max-w-md mx-auto md:mx-0 animate-fadeIn">
@@ -147,6 +162,45 @@ export default function HomePage() {
                     </div>
                 </div>
             </section>
+
+            {/* Course Detail Modal */}
+            {showCourseModal && selectedCourse && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center">
+                    <div className="absolute inset-0 bg-black/50" onClick={closeCourse} />
+                    <div className="relative w-full max-w-3xl mx-4 bg-white rounded-2xl shadow-2xl overflow-hidden">
+                        <div className="flex items-start justify-between p-6 pb-0">
+                            <div>
+                                <h3 className="text-2xl font-bold text-gray-900">{selectedCourse.title}</h3>
+                                <p className="text-sm text-gray-500 mt-1">{selectedCourse.level} • {selectedCourse.duration}</p>
+                            </div>
+                            <button onClick={closeCourse} aria-label="Đóng" className="text-gray-400 hover:text-gray-700 ml-4">✕</button>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 p-6 pt-2">
+                            <div className="md:col-span-1">
+                                <img src={selectedCourse.image} alt={selectedCourse.title} className="w-full h-40 object-cover rounded-lg shadow-sm" />
+                                <div className="mt-4 text-sm text-gray-600">
+                                    <p><span className="font-semibold">Học viên: </span>{selectedCourse.students}</p>
+                                    <p><span className="font-semibold">Thời lượng: </span>{selectedCourse.duration}</p>
+                                </div>
+                            </div>
+                            <div className="md:col-span-2">
+                                <p className="text-gray-700 mb-4">{selectedCourse.desc}</p>
+                                <div className="flex flex-wrap gap-2 mb-6">
+                                    {selectedCourse.features.map((f, i) => (
+                                        <span key={i} className="bg-blue-50 text-blue-700 text-xs font-semibold px-2 py-1 rounded">✓ {f}</span>
+                                    ))}
+                                </div>
+
+                                <div className="flex items-center gap-3">
+                                    <button onClick={() => navigate('/auth/login')} className={`py-3 px-6 ${primaryBg} text-white font-bold rounded-xl hover:bg-[#7a6acd] transition shadow-md`}>Đăng nhập để tham gia</button>
+                                    <button onClick={closeCourse} className="py-3 px-6 border rounded-xl">Đóng</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
 
     {/* -------------------- COURSES (UPDATED) -------------------- */}
           <section id="khoa-hoc" className="px-[5%] py-20">
@@ -224,18 +278,12 @@ export default function HomePage() {
                                         ))}
                                     </div>
 
-                                    {/* Price & Button */}
-                                    <div className="flex items-center justify-between gap-3">
-                                        <div>
-                                            <p className="text-xs text-gray-600">Giá khóa học</p>
-                                            <p className="text-2xl font-bold text-[#8c78ec]">
-                                                {course.price}
-                                            </p>
-                                        </div>
-                                        <button className={`flex-1 py-3 ${primaryBg} text-white font-bold rounded-xl hover:bg-[#7a6acd] transition shadow-md hover:shadow-lg text-center`}>
-                                            Xem Chi Tiết
-                                        </button>
-                                    </div>
+                                                            {/* Action Button */}
+                                                            <div className="flex items-center justify-end gap-3">
+                                                                <button onClick={() => openCourse(course)} className={`py-3 px-6 ${primaryBg} text-white font-bold rounded-xl hover:bg-[#7a6acd] transition shadow-md hover:shadow-lg`}>
+                                                                    Xem Chi Tiết
+                                                                </button>
+                                                            </div>
                                 </div>
                             </div>
                         ))}
@@ -333,7 +381,7 @@ export default function HomePage() {
                             </div>
 
                             {/* CTA Button */}
-                            <button className={`w-full py-4 ${primaryBg} text-white font-bold text-lg rounded-xl hover:bg-[#7a6acd] transition shadow-lg hover:shadow-xl`}>
+                            <button onClick={() => navigate('/auth/login')} className={`w-full py-4 ${primaryBg} text-white font-bold text-lg rounded-xl hover:bg-[#7a6acd] transition shadow-lg hover:shadow-xl`}>
                                 🚀 Bắt đầu luyện ngay
                             </button>
                         </div>
@@ -341,106 +389,7 @@ export default function HomePage() {
                 </div>
             </section>
 
-            {/* -------------------- TEST ĐẦU VÀO -------------------- */}
-            <section id="test-dau-vao" className="px-[5%] py-20 bg-gradient-to-br from-[#f8f6fb] to-[#f0eaf9]">
-                <div className="max-w-7xl mx-auto">
-                    {/* Section Header */}
-                    <div className="text-center mb-16">
-                        <h2 className="text-4xl font-bold text-gray-900 mb-4">
-                            Thi Thử Đầu Vào Miễn Phí
-                        </h2>
-                        <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-                            Đánh giá trình độ thực tế, nhận lộ trình học phù hợp trong vòng 25 phút
-                        </p>
-                        <div className="w-20 h-1 bg-gradient-to-r from-[#8c78ec] to-[#5a4d8c] mx-auto mt-4"></div>
-                    </div>
-
-                    <div className="grid lg:grid-cols-2 gap-8 items-center">
-                        {/* Left - Content */}
-                        <div>
-                            <h3 className="text-3xl font-bold text-gray-900 mb-6">
-                                Kiểm tra trình độ chỉ trong 25 phút
-                            </h3>
-
-                            {/* What You Get */}
-                            <div className="mb-8">
-                                <h4 className="text-lg font-bold text-gray-900 mb-4">Bạn sẽ nhận được:</h4>
-                                <div className="space-y-3">
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center text-green-600 font-bold">✓</div>
-                                        <span className="text-gray-700 font-semibold">Đề thi mô phỏng chuẩn quốc tế (IDP, BC)</span>
-                                    </div>
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center text-green-600 font-bold">✓</div>
-                                        <span className="text-gray-700 font-semibold">Kiểm tra 4 kỹ năng chính (L-R-W-S)</span>
-                                    </div>
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center text-green-600 font-bold">✓</div>
-                                        <span className="text-gray-700 font-semibold">Kết quả chấm tự động có ngay</span>
-                                    </div>
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center text-green-600 font-bold">✓</div>
-                                        <span className="text-gray-700 font-semibold">Lộ trình học được đề xuất tùy trình độ</span>
-                                    </div>
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center text-green-600 font-bold">✓</div>
-                                        <span className="text-gray-700 font-semibold">Tư vấn miễn phí từ giáo viên IELTS</span>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Test Details */}
-                            <div className="grid grid-cols-2 gap-4 mb-8">
-                                <div className="p-4 bg-white rounded-xl border-l-4 border-[#8c78ec] shadow-md">
-                                    <p className="text-gray-600 text-sm mb-1">Thời gian thi</p>
-                                    <p className="text-2xl font-bold text-[#8c78ec]">25 phút</p>
-                                </div>
-                                <div className="p-4 bg-white rounded-xl border-l-4 border-[#8c78ec] shadow-md">
-                                    <p className="text-gray-600 text-sm mb-1">Số câu hỏi</p>
-                                    <p className="text-2xl font-bold text-[#8c78ec]">40 câu</p>
-                                </div>
-                                <div className="p-4 bg-white rounded-xl border-l-4 border-[#8c78ec] shadow-md">
-                                    <p className="text-gray-600 text-sm mb-1">Độ khó</p>
-                                    <p className="text-2xl font-bold text-[#8c78ec]">Chuẩn IELTS</p>
-                                </div>
-                                <div className="p-4 bg-white rounded-xl border-l-4 border-[#8c78ec] shadow-md">
-                                    <p className="text-gray-600 text-sm mb-1">Giá</p>
-                                    <p className="text-2xl font-bold text-green-600">Miễn phí</p>
-                                </div>
-                            </div>
-
-                            {/* CTA Button */}
-                            <button className="w-full py-4 bg-gradient-to-r from-[#8c78ec] to-[#5a4d8c] text-white font-bold text-lg rounded-xl hover:opacity-90 transition shadow-lg hover:shadow-xl">
-                                📝 Làm bài test ngay
-                            </button>
-
-                            <p className="text-center text-gray-600 text-sm mt-4">
-                                Không cần đăng ký, hoàn toàn miễn phí
-                            </p>
-                        </div>
-
-                        {/* Right - Image */}
-                        <div className="order-first lg:order-last">
-                            <img
-                                src="https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?w=600&h=400&fit=crop"
-                                alt="Test Illustration"
-                                className="w-full rounded-2xl shadow-xl hover:shadow-2xl transition duration-300"
-                            />
-                            
-                            {/* Success Badge */}
-                            <div className="mt-6 p-4 bg-white rounded-xl shadow-lg border-l-4 border-green-500">
-                                <div className="flex items-center gap-3">
-                                    <div className="text-3xl">✨</div>
-                                    <div>
-                                        <p className="font-bold text-gray-900">95%+ học viên</p>
-                                        <p className="text-sm text-gray-600">đã đạt mục tiêu band</p>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </section>
+            {/* Test section removed */}
 
 
             {/* -------------------- LỘ TRÌNH HỌC (TIMELINE) -------------------- */}
@@ -505,7 +454,7 @@ export default function HomePage() {
 
                     {/* CTA Button */}
                     <div className="mt-16 text-center">
-                        <button className={`py-4 px-10 ${primaryBg} text-white text-lg font-bold rounded-xl hover:bg-[#7a6acd] transition shadow-lg`}>
+                        <button onClick={() => navigate('/auth/login')} className={`py-4 px-10 ${primaryBg} text-white text-lg font-bold rounded-xl hover:bg-[#7a6acd] transition shadow-lg`}>
                             Bắt đầu lộ trình học của bạn ngay
                         </button>
                     </div>

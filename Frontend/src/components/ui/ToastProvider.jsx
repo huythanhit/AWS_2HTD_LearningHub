@@ -1,6 +1,7 @@
 import React from 'react';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
+import GlobalPopup from './GlobalPopup';
 
 /**
  * ToastProvider Component
@@ -11,6 +12,7 @@ export default function ToastProvider({ children }) {
   return (
     <>
       {children}
+      <GlobalPopup />
       <ToastContainer
         position="top-right"
         autoClose={3000}
