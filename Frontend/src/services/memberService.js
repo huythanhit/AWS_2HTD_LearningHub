@@ -32,6 +32,20 @@ export async function getMyCourses(status) {
   }
 }
 
+// Fetch published courses for dashboard/catalog
+export async function getPublishedCourses() {
+  try {
+    const res = await apiClient.get("/api/courses");
+    const body = res.data;
+
+    if (Array.isArray(body)) return body;
+    if (body && Array.isArray(body.data)) return body.data;
+    return [];
+  } catch (err) {
+    throw err;
+  }
+}
+
 // Fetch published course detail
 export async function getCourseDetail(courseId) {
   if (!courseId) {
@@ -44,6 +58,20 @@ export async function getCourseDetail(courseId) {
 
     if (body && body.data) return body.data;
     return body;
+  } catch (err) {
+    throw err;
+  }
+}
+
+// Enroll current member into a course
+export async function enrollCourse(courseId) {
+  if (!courseId) {
+    throw new Error("courseId is required");
+  }
+
+  try {
+    const res = await apiClient.post(`/api/courses/${courseId}/enroll`);
+    return res.data;
   } catch (err) {
     throw err;
   }
@@ -149,7 +177,9 @@ export async function getPracticeStudy(practiceId, limit = 10) {
 export default {
   getPublicExams,
   getMyCourses,
+  getPublishedCourses,
   getCourseDetail,
+  enrollCourse,
   getSubmissionReview,
   getPractices,
   getPracticeById,
