@@ -23,6 +23,7 @@ export const memberMenuItems = [
     { label: 'Dashboard', to: '/member', icon: LayoutDashboard },
     { label: 'Khóa học của tôi', to: '/member/courses', icon: BookOpen },
     { label: 'Bài kiểm tra', to: '/member/test', icon: ClipboardList },
+    { label: 'Luyện tập', to: '/member/practices', icon: Brain },
     { label: 'Thông báo', to: '/member/notifications', icon: Bell },
     { label: 'Cài đặt', to: '/member/settings', icon: Settings },
 ];

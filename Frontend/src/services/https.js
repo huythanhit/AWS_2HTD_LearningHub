@@ -34,10 +34,17 @@ api.interceptors.response.use(
     const data = err.response?.data;
     const message =
       (typeof data === "string" && data) ||
-      (data && data.message) ||
+      (data && (data.message || data.error)) ||
       err.message ||
       "Request failed";
-    return Promise.reject(new Error(`[${status ?? "ERR"}] ${message}`));
+
+    // Create an Error but preserve the original axios response/data for callers
+    const out = new Error(`[${status ?? "ERR"}] ${message}`);
+    // attach axios response and parsed data so UI can inspect validation details
+    out.response = err.response;
+    out.data = data;
+    out.originalError = err;
+    return Promise.reject(out);
   }
 );
 
