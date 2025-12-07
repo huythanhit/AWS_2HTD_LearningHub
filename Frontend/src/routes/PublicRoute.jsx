@@ -19,6 +19,8 @@ import AdminCourses from "../pages/Admin/AdminCourses";
 import MemberDashboard from "../pages/Member/MemberDashboard";
 import Courses from "../pages/Member/Courses";
 import MemberTests from "../pages/Member/MemberTests";
+import TestAttempt from "../pages/Member/TestAttempt";
+import TestReview from "../pages/Member/TestReview";
 import MemberNotifications from "../pages/Member/MemberNotifications";
 import MemberSettings from "../pages/Member/MemberSettings";
 //Teacher
@@ -69,7 +71,9 @@ const routes = createBrowserRouter([
         children: [
             { index: true, element: <MemberDashboard /> },
               { path: "courses", element: <Courses /> },
-              { path: "test", element: <MemberTests /> },
+                            { path: "test", element: <MemberTests /> },
+                            { path: "test/:id", element: <TestAttempt /> },
+                            { path: "submission/:id", element: <TestReview /> },
       { path: "notifications", element: <MemberNotifications /> },
       { path: "settings", element: <MemberSettings /> },
             { path: "*", element: <Navigate to="/member" replace /> },
