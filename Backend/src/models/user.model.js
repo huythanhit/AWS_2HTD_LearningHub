@@ -3,22 +3,18 @@
 import { sql, pool, poolConnect } from '../config/db.js';
 import dotenv from 'dotenv';
 
-// Không cần bcrypt ở file này nữa
-// import bcrypt from 'bcrypt';
-
 // Load biến môi trường
 dotenv.config();
 
-// Chỉ dùng email admin
+// Các hằng số dùng cho admin (sẽ dùng ở bước 2.3)
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 
 // role_id trong bảng roles
 const ADMIN_ROLE_ID = 4;
 const MEMBER_ROLE_ID = 2;
 
-// ====================
 // Tìm user theo email
-// ====================
 export async function findUserByEmail(email) {
   await poolConnect;
   const request = pool.request();
@@ -33,9 +29,7 @@ export async function findUserByEmail(email) {
   return result.recordset[0] || null;
 }
 
-// =========================================
-// Tìm user theo cognito_sub (dùng cho token)
-// =========================================
+// Tìm user theo cognito_sub (dùng cho accessToken)
 export async function findUserByCognitoSub(cognitoSub) {
   await poolConnect;
   const request = pool.request();
@@ -50,16 +44,14 @@ export async function findUserByCognitoSub(cognitoSub) {
   return result.recordset[0] || null;
 }
 
-// ====================================
 // Tạo user + profile, gắn với cognito_sub
-// ====================================
 export async function createUserWithProfile({
   email,
   passwordHash,
   phone,
   fullName,
   cognitoSub,
-  roleId
+  roleId   
 }) {
   await poolConnect;
 
@@ -113,9 +105,7 @@ export async function createUserWithProfile({
   }
 }
 
-// ======================================
 // Lấy user + profile theo id
-// ======================================
 export async function findUserByIdWithProfile(userId) {
   await poolConnect;
   const request = pool.request();
@@ -134,13 +124,12 @@ export async function findUserByIdWithProfile(userId) {
     LEFT JOIN user_profiles up ON up.user_id = u.id
     WHERE u.id = @id
   `);
-
+  
   return result.recordset[0] || null;
 }
 
-// ======================================
-// Cập nhật trạng thái email_verified
-// ======================================
+// Cập nhật trạng thái email_verified của user
+// Dùng để đồng bộ cờ email_verified trong DB với trạng thái verify trên Cognito
 export async function updateEmailVerified(userId, isVerified) {
   await poolConnect;
   const request = pool.request();
@@ -164,9 +153,7 @@ export async function updateEmailVerified(userId, isVerified) {
   return result.recordset[0] || null;
 }
 
-// ======================================
-// Cập nhật password_hash cho user
-// ======================================
+// Cập nhật password_hash cho user (sau khi reset mật khẩu)
 export async function updateUserPasswordHash(userId, passwordHash) {
   await poolConnect;
   const request = pool.request();
@@ -190,14 +177,11 @@ export async function updateUserPasswordHash(userId, passwordHash) {
   return result.recordset[0] || null;
 }
 
-// ====================================================
-// Đảm bảo trong DB chỉ có duy nhất 1 tài khoản Admin
-// KHÔNG tự tạo admin mới, chỉ set role cho email trong .env
-// ====================================================
+// Đảm bảo trong DB chỉ có duy nhất 1 tài khoản Admin 
 export async function ensureSingleAdmin() {
-  if (!ADMIN_EMAIL) {
+  if (!ADMIN_EMAIL || !ADMIN_PASSWORD) {
     console.warn(
-      '[ensureSingleAdmin] ADMIN_EMAIL chưa được cấu hình trong .env, bỏ qua bước đảm bảo admin.'
+      '[ensureSingleAdmin] ADMIN_EMAIL hoặc ADMIN_PASSWORD chưa được cấu hình trong .env, bỏ qua seeding admin.'
     );
     return;
   }
@@ -217,7 +201,7 @@ export async function ensureSingleAdmin() {
       AND email <> @adminEmail;
   `);
 
-  // 2. Tìm user có email = ADMIN_EMAIL
+  // 2. Kiểm tra user có email = ADMIN_EMAIL đã tồn tại chưa
   const checkReq = pool.request();
   checkReq.input('adminEmail', sql.NVarChar(255), ADMIN_EMAIL);
 
@@ -227,36 +211,48 @@ export async function ensureSingleAdmin() {
     WHERE email = @adminEmail;
   `);
 
-  if (checkResult.recordset.length === 0) {
-    console.warn(
-      `[ensureSingleAdmin] Không tìm thấy user với email ${ADMIN_EMAIL} trong DB. Hãy đăng ký tài khoản này qua API /auth/register trước.`
-    );
+  if (checkResult.recordset.length > 0) {
+    const admin = checkResult.recordset[0];
+
+    // Nếu user tồn tại nhưng chưa mang role Admin thì cập nhật lại role_id = 4
+    if (admin.role_id !== ADMIN_ROLE_ID) {
+      const updateReq = pool.request();
+      updateReq.input('id', sql.UniqueIdentifier, admin.id);
+      updateReq.input('adminRoleId', sql.SmallInt, ADMIN_ROLE_ID);
+
+      await updateReq.query(`
+        UPDATE users
+        SET role_id = @adminRoleId
+        WHERE id = @id;
+      `);
+    }
+
+    console.log('✅ Đã đảm bảo tài khoản Admin tồn tại:', ADMIN_EMAIL);
     return;
   }
 
-  const admin = checkResult.recordset[0];
+  // 3. Nếu chưa có user với email ADMIN_EMAIL thì tạo mới Admin
+  const passwordHash = await bcrypt.hash(ADMIN_PASSWORD, 10);
 
-  // 3. Nếu user tồn tại nhưng chưa mang role Admin thì cập nhật lại role_id = 4
-  if (admin.role_id !== ADMIN_ROLE_ID) {
-    const updateReq = pool.request();
-    updateReq.input('id', sql.UniqueIdentifier, admin.id);
-    updateReq.input('adminRoleId', sql.SmallInt, ADMIN_ROLE_ID);
+  const insertReq = pool.request();
+  insertReq.input('email', sql.NVarChar(255), ADMIN_EMAIL);
+  insertReq.input('password_hash', sql.NVarChar(sql.MAX), passwordHash);
+  insertReq.input('adminRoleId', sql.SmallInt, ADMIN_ROLE_ID);
 
-    await updateReq.query(`
-      UPDATE users
-      SET 
-        role_id = @adminRoleId,
-        updated_at = SYSDATETIMEOFFSET()
-      WHERE id = @id;
-    `);
-  }
+  await insertReq.query(`
+    DECLARE @id UNIQUEIDENTIFIER = NEWID();
 
-  console.log('✅ Đã đảm bảo tài khoản Admin tồn tại & có role Admin:', ADMIN_EMAIL);
+    INSERT INTO users (id, email, password_hash, role_id, is_active, email_verified)
+    VALUES (@id, @email, @password_hash, @adminRoleId, 1, 1);
+
+    INSERT INTO user_profiles (user_id, full_name)
+    VALUES (@id, N'System Admin');
+  `);
+
+  console.log('✅ Đã tạo mới tài khoản Admin mặc định:', ADMIN_EMAIL);
 }
 
-// ====================================================
 // Lấy danh sách user + profile + role, có phân trang + search
-// ====================================================
 export async function getUsersWithProfilePaginated(
   page = 1,
   pageSize = 10,
@@ -323,9 +319,7 @@ export async function getUsersWithProfilePaginated(
   };
 }
 
-// ======================================
 // Cập nhật role cho user theo id
-// ======================================
 export async function updateUserRoleById(userId, roleId) {
   await poolConnect;
   const request = pool.request();
@@ -344,9 +338,7 @@ export async function updateUserRoleById(userId, roleId) {
   return result.recordset[0] || null;
 }
 
-// ======================================
 // Xoá mềm user: set is_active = 0
-// ======================================
 export async function softDeleteUserById(userId) {
   await poolConnect;
   const request = pool.request();
@@ -364,13 +356,8 @@ export async function softDeleteUserById(userId) {
   return result.recordset[0] || null;
 }
 
-// =====================================================
-// Cập nhật profile + phone + role cho user (Admin dùng)
-// =====================================================
-export async function updateUserProfileAndRoleByAdmin(
-  userId,
-  { fullName, phone, roleId }
-) {
+// Cập nhật profile (full_name) + phone + role cho user, dùng cho Admin
+export async function updateUserProfileAndRoleByAdmin(userId, { fullName, phone, roleId }) {
   await poolConnect;
 
   const transaction = new sql.Transaction(pool);
@@ -414,9 +401,7 @@ export async function updateUserProfileAndRoleByAdmin(
   }
 }
 
-// ======================================
 // Khôi phục user đã xóa mềm: set is_active = 1
-// ======================================
 export async function restoreUserById(userId) {
   await poolConnect;
   const request = pool.request();
@@ -434,9 +419,7 @@ export async function restoreUserById(userId) {
   return result.recordset[0] || null;
 }
 
-// =====================================================
-// Lấy danh sách user đã xóa mềm (is_active = 0)
-// =====================================================
+// Lấy danh sách user đã xóa mềm (is_active = 0) + profile + role, có phân trang + search
 export async function getSoftDeletedUsersWithProfilePaginated(
   page = 1,
   pageSize = 10,
