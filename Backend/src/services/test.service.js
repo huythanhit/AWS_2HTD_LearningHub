@@ -54,21 +54,32 @@ function parseExamQuestions(exam) {
 
 // Map 1 dòng exam_questions + questions thành object trả cho FE
 function mapExamQuestionRow(q) {
+  const choices =
+    typeof q.choices === 'string' && q.choices
+      ? JSON.parse(q.choices)
+      : q.choices || null;
+
+  const tags =
+    typeof q.tags === 'string' && q.tags
+      ? JSON.parse(q.tags)
+      : q.tags || null;
+
   return {
-    questionId: q.question_id,
+    questionId: q.question_id ?? q.questionId ?? q.id,
     title: q.title,
     body: q.body,
     type: q.type,
     difficulty: q.difficulty,
-    choices: q.choices || null,
-    tags: q.tags || null,
+    choices,
+    tags,
     points: Number(q.points ?? 1),
     sequence: q.sequence
   };
 }
 
+
 // Build response chung cho các API về câu hỏi trong đề thi
-function buildExamQuestionsResponse(exam, questionItems) {
+function buildExamQuestionsResponse(exam, questionList = []) {
   return {
     examId: exam.id,
     examTitle: exam.title,
@@ -79,7 +90,7 @@ function buildExamQuestionsResponse(exam, questionItems) {
     published: exam.published,
     createdAt: exam.created_at,
     updatedAt: exam.updated_at,
-    questions: questionItems
+    questions: questionList
   };
 }
 
@@ -226,13 +237,10 @@ async function ensureExamOwnedByTeacher(teacherId, examId) {
 
 // Tạo câu hỏi và gắn vào 1 exam
 export async function createQuestionInExam(teacherId, examId, payload) {
-  // 1. Check exam thuộc về teacher và lấy meta đề
   const exam = await ensureExamOwnedByTeacher(teacherId, examId);
 
-  // 2. Tạo câu hỏi (bank)
   const question = await createTeacherQuestion(teacherId, payload);
 
-  // 3. Gắn vào exam_questions
   const pool = await getPool();
   const request = pool.request();
 
@@ -257,56 +265,98 @@ export async function createQuestionInExam(teacherId, examId, payload) {
 
   const eq = result.recordset[0];
 
-  const questionItem = {
-    questionId: question.id,
-    title: question.title,
-    body: question.body,
-    type: question.type,
-    difficulty: question.difficulty,
-    choices: question.choices || null,
-    tags: question.tags || null,
-    points: Number(eq.points ?? 1),
-    sequence: eq.sequence
+  const parsedChoices = question.choices
+  ? JSON.parse(question.choices)
+  : null;
+const parsedTags = question.tags
+  ? JSON.parse(question.tags)
+  : null;
+
+const questionItem = {
+  questionId: question.id,
+  title: question.title,
+  body: question.body,
+  type: question.type,
+  difficulty: question.difficulty,
+  choices: parsedChoices,
+  tags: parsedTags,
+  points: Number(eq.points ?? 1),
+  sequence: eq.sequence
   };
 
   return buildExamQuestionsResponse(exam, [questionItem]);
 }
 
+
 // Lấy danh sách câu hỏi trong 1 exam (GV)
 export async function listQuestionsInExam(teacherId, examId) {
   const exam = await ensureExamOwnedByTeacher(teacherId, examId);
-  parseExamQuestions(exam);
 
-  const questionItems = (exam.questions || []).map(mapExamQuestionRow);
+  const pool = await getPool();
+  const request = pool.request();
+  request.input('exam_id', sql.UniqueIdentifier, examId);
 
-  return buildExamQuestionsResponse(exam, questionItems);
+  const result = await request.query(`
+    SELECT
+      eq.id              AS exam_question_id,
+      eq.exam_id,
+      eq.question_id,
+      eq.points,
+      eq.sequence,
+      q.title,
+      q.body,
+      q.type,
+      q.difficulty,
+      q.choices,
+      q.tags
+    FROM exam_questions eq
+    JOIN questions q ON q.id = eq.question_id
+    WHERE eq.exam_id = @exam_id
+    ORDER BY eq.sequence ASC, eq.id ASC;   
+  `);
+
+  const mappedQuestions = result.recordset.map(row => mapExamQuestionRow(row));
+  return buildExamQuestionsResponse(exam, mappedQuestions);
 }
 
+
 // Lấy chi tiết 1 câu hỏi trong exam (GV)
-export async function getQuestionInExamDetail(
-  teacherId,
-  examId,
-  questionId
-) {
-  const result = await listQuestionsInExam(teacherId, examId);
-  const key = String(questionId).toLowerCase();
+export async function getQuestionInExamDetail(teacherId, examId, questionId) {
+  const exam = await ensureExamOwnedByTeacher(teacherId, examId);
 
-  const q = (result.questions || []).find(
-    (it) => String(it.questionId).toLowerCase() === key
-  );
+  const pool = await getPool();
+  const request = pool.request();
+  request.input('exam_id', sql.UniqueIdentifier, examId);
+  request.input('question_id', sql.UniqueIdentifier, questionId);
 
-  if (!q) {
+  const result = await request.query(`
+    SELECT
+      eq.id              AS exam_question_id,
+      eq.exam_id,
+      eq.question_id,
+      eq.points,
+      eq.sequence,
+      q.title,
+      q.body,
+      q.type,
+      q.difficulty,
+      q.choices,
+      q.tags
+    FROM exam_questions eq
+    JOIN questions q ON q.id = eq.question_id
+    WHERE eq.exam_id = @exam_id
+      AND eq.question_id = @question_id;
+  `);
+
+  if (result.recordset.length === 0) {
     const err = new Error('Question not found in this exam');
     err.status = 404;
     throw err;
   }
 
-  return {
-    ...result,
-    questions: [q] 
-  };
+  const q = mapExamQuestionRow(result.recordset[0]);
+  return buildExamQuestionsResponse(exam, [q]);
 }
-
 
 // Cập nhật câu hỏi trong exam (cả nội dung + điểm / thứ tự)
 export async function updateQuestionInExam(
@@ -315,7 +365,6 @@ export async function updateQuestionInExam(
   questionId,
   payload
 ) {
-  // check exam thuộc về teacher và lấy meta đề
   const exam = await ensureExamOwnedByTeacher(teacherId, examId);
 
   const { points, sequence, ...questionFields } = payload;
@@ -341,7 +390,6 @@ export async function updateQuestionInExam(
 
   const pool = await getPool();
   const request = pool.request();
-
   request.input('exam_id', sql.UniqueIdentifier, examId);
   request.input('question_id', sql.UniqueIdentifier, questionId);
   request.input(
@@ -355,7 +403,7 @@ export async function updateQuestionInExam(
     sequence != null ? sequence : 0
   );
 
-  const result = await request.query(`
+  const eqResult = await request.query(`
     UPDATE eq
     SET points = @points,
         sequence = @sequence
@@ -364,13 +412,13 @@ export async function updateQuestionInExam(
     WHERE eq.exam_id = @exam_id AND eq.question_id = @question_id;
   `);
 
-  if (result.recordset.length === 0) {
+  if (eqResult.recordset.length === 0) {
     const err = new Error('Question not found in this exam');
     err.status = 404;
     throw err;
   }
 
-  const eq = result.recordset[0];
+  const eq = eqResult.recordset[0];
 
   const parsedChoices = updatedQuestion.choices
     ? JSON.parse(updatedQuestion.choices)
