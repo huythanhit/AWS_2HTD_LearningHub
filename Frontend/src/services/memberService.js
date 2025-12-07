@@ -1,9 +1,9 @@
-import apiClient from './https';
+import apiClient from "./https";
 
 // Fetch public exams list
 export async function getPublicExams() {
   try {
-    const res = await apiClient.get('/api/tests/public-exams');
+    const res = await apiClient.get("/api/tests/public-exams");
     // Expected shape: { success: true, message, data: [ ...exams ] }
     const body = res.data;
     if (body && Array.isArray(body.data)) return body.data;
@@ -16,7 +16,38 @@ export async function getPublicExams() {
   }
 }
 
+// Fetch current member courses
+export async function getMyCourses(status) {
+  try {
+    const normalized = status && status !== "all" ? status : null;
+    const query = normalized ? `?status=${encodeURIComponent(normalized)}` : "";
+    const res = await apiClient.get(`/api/my/courses${query}`);
+    const body = res.data;
 
+    if (Array.isArray(body)) return body;
+    if (body && Array.isArray(body.data)) return body.data;
+    return [];
+  } catch (err) {
+    throw err;
+  }
+}
+
+// Fetch published course detail
+export async function getCourseDetail(courseId) {
+  if (!courseId) {
+    throw new Error("courseId is required");
+  }
+
+  try {
+    const res = await apiClient.get(`/api/courses/${courseId}`);
+    const body = res.data;
+
+    if (body && body.data) return body.data;
+    return body;
+  } catch (err) {
+    throw err;
+  }
+}
 
 // Start an exam (create submission) and return the exam + submission info
 export async function startExam(examId) {
@@ -34,7 +65,10 @@ export async function startExam(examId) {
 export async function submitExam(submissionId, answers) {
   try {
     const payload = { answers };
-    const res = await apiClient.post(`/api/tests/submissions/${submissionId}/submit`, payload);
+    const res = await apiClient.post(
+      `/api/tests/submissions/${submissionId}/submit`,
+      payload
+    );
     // Expected shape: { success: true, message, data: { submissionId, totalScore, result: {...} } }
     return res.data.data;
   } catch (err) {
@@ -45,7 +79,7 @@ export async function submitExam(submissionId, answers) {
 // Get current user's submissions (history)
 export async function getMySubmissions() {
   try {
-    const res = await apiClient.get('/api/tests/my-submissions');
+    const res = await apiClient.get("/api/tests/my-submissions");
     const body = res.data;
     if (body && Array.isArray(body.data)) return body.data;
     if (Array.isArray(body)) return body;
@@ -58,7 +92,9 @@ export async function getMySubmissions() {
 // Get review details for a submission
 export async function getSubmissionReview(submissionId) {
   try {
-    const res = await apiClient.get(`/api/tests/submissions/${submissionId}/review`);
+    const res = await apiClient.get(
+      `/api/tests/submissions/${submissionId}/review`
+    );
     // Expected shape: { success: true, message, data: { submissionId, examId, examTitle, totalScore, submittedAt, summary, items } }
     return res.data.data;
   } catch (err) {
@@ -69,7 +105,7 @@ export async function getSubmissionReview(submissionId) {
 // Fetch practice quizzes (public)
 export async function getPractices() {
   try {
-    const res = await apiClient.get('/api/practices');
+    const res = await apiClient.get("/api/practices");
     // Expected: { success: true, data: [ ... ] } or array directly
     const body = res.data;
     if (body && Array.isArray(body.data)) return body.data;
@@ -96,7 +132,9 @@ export async function getPracticeById(practiceId) {
 // Fetch study cards for a practice set (flashcard view)
 export async function getPracticeStudy(practiceId, limit = 10) {
   try {
-    const res = await apiClient.get(`/api/practices/${practiceId}/study?limit=${limit}`);
+    const res = await apiClient.get(
+      `/api/practices/${practiceId}/study?limit=${limit}`
+    );
     // Expected: { success: true, data: [ cards... ] }
     const body = res.data;
     if (body && Array.isArray(body.data)) return body.data;
@@ -110,6 +148,8 @@ export async function getPracticeStudy(practiceId, limit = 10) {
 // add to default export for convenience
 export default {
   getPublicExams,
+  getMyCourses,
+  getCourseDetail,
   getSubmissionReview,
   getPractices,
   getPracticeById,
