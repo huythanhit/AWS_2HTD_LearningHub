@@ -7,7 +7,8 @@ import dotenv from "dotenv";
 
 import authRoutes from "./routes/auth.routes.js";
 import testRoutes from "./routes/test.routes.js";
-import userRoutes from "./routes/user.routes.js";  
+import userRoutes from "./routes/user.routes.js";
+import profileRoutes from "./routes/profile.routes.js";
 import practiceRoutes from './routes/practice.routes.js';
 import courseRoutes from "./routes/course.routes.js";
 import notificationRoutes from './routes/notification.routes.js';
@@ -84,7 +85,10 @@ app.use("/api/auth", authRoutes);
 app.use("/api/tests", testRoutes);
 
 // User (admin) routes  
-app.use("/api", userRoutes);   
+app.use("/api", userRoutes);
+
+// Profile routes (user tự quản lý profile)
+app.use("/api", profileRoutes);
 
 //Practice
 app.use('/api/practices', practiceRoutes);

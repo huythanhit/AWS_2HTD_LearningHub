@@ -22,6 +22,7 @@ import {
   deleteCourseLecture
 } from '../../services/teacherService';
 import { lectureValidationSchema } from '../../validation/teacherClasses';
+import { uploadLectureFile } from '../../services/uploadService';
 
 export default function TeacherClasses() {
   const [courses, setCourses] = useState([]);
@@ -39,6 +40,8 @@ export default function TeacherClasses() {
   const [openMenuId, setOpenMenuId] = useState(null);
   const [lectureToDelete, setLectureToDelete] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [uploadingFile, setUploadingFile] = useState(false);
+  const [selectedFile, setSelectedFile] = useState(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -131,13 +134,37 @@ export default function TeacherClasses() {
     published: lecture?.published ?? true
   });
 
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setSelectedFile(file);
+    }
+  };
+
+  const handleFileUpload = async (file, courseId) => {
+    if (!file) return null;
+    
+    setUploadingFile(true);
+    try {
+      const result = await uploadLectureFile(file, courseId);
+      return result.s3Key || result.key;
+    } catch (error) {
+      toast.error(error.message || 'Upload file thất bại');
+      throw error;
+    } finally {
+      setUploadingFile(false);
+    }
+  };
+
   const handleOpenCreateLecture = () => {
     setEditingLecture(null);
+    setSelectedFile(null);
     setIsCreatingLecture(true);
   };
 
   const handleOpenEditLecture = (lecture) => {
     setEditingLecture(lecture);
+    setSelectedFile(null);
     setOpenMenuId(null);
     setIsCreatingLecture(true);
   };
@@ -192,17 +219,35 @@ export default function TeacherClasses() {
     }
   };
 
-  const handleSubmitLecture = async (values, { setSubmitting }) => {
+  const handleSubmitLecture = async (values, { setSubmitting, setFieldValue }) => {
     if (!selectedCourse?.courseId) {
       setSubmitting(false);
       return;
     }
 
     try {
+      let s3Key = values.s3Key;
+
+      // Nếu có file mới được chọn, upload file trước
+      if (selectedFile) {
+        s3Key = await handleFileUpload(selectedFile, selectedCourse.courseId);
+        if (!s3Key) {
+          setSubmitting(false);
+          return;
+        }
+      }
+
+      // Nếu không có s3Key (không có file và không có s3Key cũ), báo lỗi
+      if (!s3Key && !editingLecture) {
+        toast.error('Vui lòng chọn file hoặc nhập S3 Key');
+        setSubmitting(false);
+        return;
+      }
+
       const payload = {
         title: values.title,
         contentType: values.contentType,
-        s3Key: values.s3Key,
+        s3Key: s3Key,
         durationSeconds: Number(values.durationSeconds) || 0,
         orderIndex: Number(values.orderIndex) || 1,
         published: !!values.published
@@ -238,6 +283,7 @@ export default function TeacherClasses() {
 
       setIsCreatingLecture(false);
       setEditingLecture(null);
+      setSelectedFile(null);
       toast.success(editingLecture ? 'Cập nhật bài giảng thành công!' : 'Tạo bài giảng thành công!');
     } catch (err) {
       toast.error(err.message || (editingLecture ? 'Sửa bài giảng thất bại' : 'Tạo bài giảng thất bại'));
@@ -608,6 +654,7 @@ export default function TeacherClasses() {
             <Formik
               initialValues={getInitialValues(editingLecture)}
               validationSchema={lectureValidationSchema}
+              validationContext={{ hasFile: !!selectedFile || !!editingLecture?.s3Key }}
               onSubmit={handleSubmitLecture}
               enableReinitialize
             >
@@ -658,15 +705,44 @@ export default function TeacherClasses() {
               </div>
                             
               <div>
-                <label htmlFor="s3Key" className="block text-sm font-medium text-gray-700 mb-1">
-                  S3 Key / URL nội dung <span className="text-red-500">*</span>
+                <label htmlFor="file" className="block text-sm font-medium text-gray-700 mb-1">
+                  File bài giảng <span className="text-red-500">*</span>
                 </label>
+                <div className="space-y-2">
+                  <input
+                    type="file"
+                    id="file"
+                    name="file"
+                    accept="video/*,application/pdf"
+                    onChange={handleFileChange}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400"
+                  />
+                  {selectedFile && (
+                    <div className="text-xs text-gray-600 bg-gray-50 px-3 py-2 rounded border border-gray-200">
+                      <span className="font-medium">Đã chọn:</span> {selectedFile.name} ({(selectedFile.size / 1024 / 1024).toFixed(2)} MB)
+                    </div>
+                  )}
+                  {editingLecture && editingLecture.s3Key && !selectedFile && (
+                    <div className="text-xs text-gray-500 bg-gray-50 px-3 py-2 rounded border border-gray-200">
+                      <span className="font-medium">File hiện tại:</span> {editingLecture.s3Key}
+                      <br />
+                      <span className="text-gray-400">Chọn file mới để thay thế</span>
+                    </div>
+                  )}
+                  {uploadingFile && (
+                    <div className="text-xs text-indigo-600 bg-indigo-50 px-3 py-2 rounded border border-indigo-200">
+                      Đang upload file...
+                    </div>
+                  )}
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  Hỗ trợ: Video (MP4, MPEG, MOV, AVI) hoặc PDF. Tối đa 500MB.
+                </p>
+                {/* Giữ lại field ẩn cho s3Key nếu cần fallback */}
                 <Field
-                  type="text"
+                  type="hidden"
                   id="s3Key"
                   name="s3Key"
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400"
-                  placeholder="courses/english-a2/lesson1.mp4"
                 />
                 <ErrorMessage name="s3Key" component="div" className="text-red-500 text-xs mt-1" />
               </div>
@@ -714,11 +790,11 @@ export default function TeacherClasses() {
                 </button>
                 <button 
                   type="submit"
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || uploadingFile}
                   className="px-5 py-2 rounded-lg bg-indigo-600 text-white text-sm font-medium shadow hover:bg-indigo-700 disabled:opacity-70"
                 >
-                  {isSubmitting
-                    ? 'Đang lưu...'
+                  {isSubmitting || uploadingFile
+                    ? (uploadingFile ? 'Đang upload...' : 'Đang lưu...')
                     : editingLecture
                     ? 'Cập nhật bài giảng'
                     : 'Lưu bài giảng'}

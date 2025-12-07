@@ -1,5 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Users, Layers, FilePlus, PieChart, Bell, Calendar as CalendarIcon, ArrowUpRight, Search, Filter } from 'lucide-react';
+import { getTeacherCourses } from '../../services/teacherService';
+import { getExams } from '../../services/teacherService';
 
 /**
  * Teacher Dashboard - Professional UI
@@ -8,6 +10,7 @@ import { Users, Layers, FilePlus, PieChart, Bell, Calendar as CalendarIcon, Arro
  */
 
 export default function TeacherDashboard() {
+  const [loading, setLoading] = useState(true);
   // --- CSS Animation Styles ---
   const styles = `
     @keyframes fadeInUp {
@@ -28,26 +31,51 @@ export default function TeacherDashboard() {
     }
   `;
 
-  // --- MOCK DATA ---
-  const [classes] = useState([
-    { id: 'CLS001', name: 'IELTS Foundation K12', students: 28, level: 'Pre-Intermediate', schedule: 'T2/T4 19:00' },
-    { id: 'CLS002', name: 'General English - Work', students: 22, level: 'Intermediate', schedule: 'T3/T5 18:00' },
-    { id: 'CLS003', name: 'IELTS Intensive 7.0+', students: 16, level: 'Upper-Intermediate', schedule: 'T7 09:00' },
-    { id: 'CLS004', name: 'Communication Master', students: 12, level: 'Advanced', schedule: 'CN 14:00' },
-  ]);
+  // --- DATA FROM API ---
+  const [classes, setClasses] = useState([]);
+  const [assignments, setAssignments] = useState([]);
+  const [exams, setExams] = useState([]);
 
-  const [assignments] = useState([
-    { id: 'A001', title: 'Writing Task 1 - Maps', classId: 'CLS001', due: '2025-12-05', submissions: 24, total: 28 },
-    { id: 'A002', title: 'Listening Drill - Unit 4', classId: 'CLS002', due: '2025-12-07', submissions: 18, total: 22 },
-    { id: 'A003', title: 'Mock Test - Reading', classId: 'CLS003', due: '2025-12-12', submissions: 12, total: 16 },
-    { id: 'A004', title: 'Speaking Video Record', classId: 'CLS004', due: '2025-12-14', submissions: 5, total: 12 },
-  ]);
+  // Load data từ API
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        
+        // Load courses (classes)
+        const coursesData = await getTeacherCourses();
+        const mappedClasses = (Array.isArray(coursesData) ? coursesData : []).map((course) => ({
+          id: course.courseId,
+          name: course.title || course.name,
+          students: 0, // TODO: Lấy từ API nếu có
+          level: course.level || '',
+          schedule: course.schedule || ''
+        }));
+        setClasses(mappedClasses);
 
-  const [exams, setExams] = useState([
-    { id: 'EX01', title: 'Mock IELTS - Nov', classId: 'CLS003', duration: 120, questions: 80, published: true },
-    { id: 'EX02', title: 'Placement Test - Dec', classId: 'CLS001', duration: 30, questions: 25, published: false },
-    { id: 'EX03', title: 'Grammar Quiz - Unit2', classId: 'CLS002', duration: 20, questions: 15, published: false },
-  ]);
+        // Load exams
+        const examsData = await getExams();
+        const mappedExams = (Array.isArray(examsData) ? examsData : []).map((exam) => ({
+          id: exam.id,
+          title: exam.title,
+          classId: exam.course_id || null,
+          duration: exam.duration_minutes || 0,
+          questions: 0, // TODO: Lấy từ API nếu có
+          published: exam.published || false
+        }));
+        setExams(mappedExams);
+
+        // Assignments - TODO: Cần API riêng hoặc tính từ exams
+        setAssignments([]);
+      } catch (error) {
+        console.error('Error fetching dashboard data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
 
   // --- LOGIC ---
   const stats = useMemo(() => {
@@ -63,7 +91,7 @@ export default function TeacherDashboard() {
     return { totalStudents, totalClasses, pendingTests, avgCompletion, totalSubmissions, totalRequired };
   }, [classes, assignments, exams]);
 
-  const weeklyActivity = [15, 22, 18, 32, 45, 20, 25]; // Mock data chart
+  const weeklyActivity = [0, 0, 0, 0, 0, 0, 0]; // TODO: Lấy từ API nếu có
 
   // Xử lý sự kiện
   const publishExam = (id) => {
@@ -150,7 +178,18 @@ export default function TeacherDashboard() {
         </div>
       </header>
 
+      {/* Loading State */}
+      {loading && (
+        <div className="flex items-center justify-center py-12">
+          <div className="text-center">
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mb-4"></div>
+            <p className="text-gray-500">Đang tải dữ liệu...</p>
+          </div>
+        </div>
+      )}
+
       {/* --- STAT CARDS --- */}
+      {!loading && (
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         <StatCard
           title="Tổng Học Viên"
@@ -199,11 +238,13 @@ export default function TeacherDashboard() {
           </div>
           {/* Decorative circles */}
           <div className="absolute -bottom-4 -right-4 w-24 h-24 bg-white/10 rounded-full blur-xl"></div>
-          <div className="absolute top-0 right-0 w-16 h-16 bg-white/5 rounded-full blur-lg"></div>
+          <div className="absolute top-0 right-0 w-16 h-16 bg-white/5 rounded-full blur-lg">          </div>
         </div>
       </div>
+      )}
 
       {/* --- MAIN CONTENT GRID --- */}
+      {!loading && (
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         
         {/* Left Column: Classes & Assignments */}
@@ -383,6 +424,7 @@ export default function TeacherDashboard() {
 
         </div>
       </div>
+      )}
     </div>
   );
 }

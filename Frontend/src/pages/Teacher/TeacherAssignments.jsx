@@ -8,7 +8,7 @@ import {
 import { 
     getExams, createExam, updateExam, createQuestion, 
     getExamQuestions, createExamQuestion, updateExamQuestion, deleteExamQuestion,
-    publishExam, deleteExam 
+    publishExam, deleteExam, getTeacherCourses
 } from '../../services/teacherService';
 
 export default function TeacherAssignments() {
@@ -20,13 +20,8 @@ export default function TeacherAssignments() {
     const [error, setError] = useState(null);
     const [openMenuId, setOpenMenuId] = useState(null); // ID của card đang mở menu
 
-    // Dữ liệu Lớp học (Đồng bộ với Dashboard)
-    const mockClasses = [
-        { id: 'CLS001', name: 'IELTS Foundation K12' },
-        { id: 'CLS002', name: 'General English - Work' },
-        { id: 'CLS003', name: 'IELTS Intensive 7.0+' },
-        { id: 'CLS004', name: 'Communication Master' },
-    ];
+    // Dữ liệu Lớp học từ API
+    const [classes, setClasses] = useState([]);
 
     // Dữ liệu Bài tập từ API
     const [assignments, setAssignments] = useState([]);
@@ -44,6 +39,23 @@ export default function TeacherAssignments() {
             minute: '2-digit'
         });
     };
+
+    // Load classes từ API
+    useEffect(() => {
+        const fetchClasses = async () => {
+            try {
+                const coursesData = await getTeacherCourses();
+                const mappedClasses = (Array.isArray(coursesData) ? coursesData : []).map((course) => ({
+                    id: course.courseId,
+                    name: course.title || course.name
+                }));
+                setClasses(mappedClasses);
+            } catch (error) {
+                console.error('Error fetching classes:', error);
+            }
+        };
+        fetchClasses();
+    }, []);
 
     // Fetch dữ liệu đề thi từ API
     useEffect(() => {
@@ -225,7 +237,7 @@ export default function TeacherAssignments() {
             };
 
             let updatedExam;
-            const selectedClass = mockClasses.find(c => c.id === newExam.classId);
+            const selectedClass = classes.find(c => c.id === newExam.classId);
 
             // Nếu đang edit, gọi API PUT
             if (editingExamId) {
@@ -467,7 +479,7 @@ export default function TeacherAssignments() {
                                         onChange={(e) => setNewExam({...newExam, classId: e.target.value})}
                                     >
                                         <option value="">-- Chỉ lưu kho (Không giao ngay) --</option>
-                                        {mockClasses.map(c => (
+                                        {classes.map(c => (
                                             <option key={c.id} value={c.id}>{c.name}</option>
                                         ))}
                                     </select>
@@ -627,7 +639,7 @@ export default function TeacherAssignments() {
                         onChange={(e) => setFilterClass(e.target.value)}
                     >
                         <option value="All">Tất cả các lớp</option>
-                        {mockClasses.map(c => (
+                        {classes.map(c => (
                             <option key={c.id} value={c.id}>{c.name}</option>
                         ))}
                     </select>

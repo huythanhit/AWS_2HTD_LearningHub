@@ -115,6 +115,7 @@ export async function findUserByIdWithProfile(userId) {
     SELECT 
       u.id,
       u.email,
+      u.phone,
       u.role_id,
       u.is_active,
       up.full_name,
@@ -126,6 +127,56 @@ export async function findUserByIdWithProfile(userId) {
   `);
   
   return result.recordset[0] || null;
+}
+
+// Cập nhật profile của user (user tự cập nhật, không đổi role)
+export async function updateUserProfile(userId, { fullName, phone, bio, avatar }) {
+  await poolConnect;
+
+  const transaction = new sql.Transaction(pool);
+  await transaction.begin();
+
+  try {
+    // Update bảng users: phone
+    if (phone !== undefined) {
+      const userReq = new sql.Request(transaction);
+      userReq.input('id', sql.UniqueIdentifier, userId);
+      userReq.input('phone', sql.NVarChar(50), phone || null);
+
+      await userReq.query(`
+        UPDATE users
+        SET
+          phone = @phone,
+          updated_at = SYSDATETIMEOFFSET()
+        WHERE id = @id;
+      `);
+    }
+
+    // Update bảng user_profiles: full_name, bio, avatar_s3_key
+    const profileReq = new sql.Request(transaction);
+    profileReq.input('user_id', sql.UniqueIdentifier, userId);
+    profileReq.input('full_name', sql.NVarChar(255), fullName !== undefined ? (fullName || null) : null);
+    profileReq.input('bio', sql.NVarChar(sql.MAX), bio !== undefined ? (bio || null) : null);
+    profileReq.input('avatar_s3_key', sql.NVarChar(sql.MAX), avatar !== undefined ? (avatar || null) : null);
+
+    await profileReq.query(`
+      UPDATE user_profiles
+      SET 
+        full_name = COALESCE(@full_name, full_name),
+        bio = COALESCE(@bio, bio),
+        avatar_s3_key = COALESCE(@avatar_s3_key, avatar_s3_key)
+      WHERE user_id = @user_id;
+    `);
+
+    await transaction.commit();
+
+    // Lấy lại user sau update
+    const updated = await findUserByIdWithProfile(userId);
+    return updated;
+  } catch (err) {
+    await transaction.rollback();
+    throw err;
+  }
 }
 
 // Cập nhật trạng thái email_verified của user

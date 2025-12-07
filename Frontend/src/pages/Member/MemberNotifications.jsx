@@ -1,98 +1,73 @@
 // File: src/pages/Member/MemberNotifications.jsx
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
     Bell, Calendar, ClipboardList, CheckCheck, Trash2, 
     Clock, Info, AlertTriangle, Video, ArrowRight, 
     MessageCircle, Wallet, FileText, Zap, X
 } from 'lucide-react';
+import { getMyNotifications, markNotificationRead, markAllNotificationsRead } from '../../services/notificationService';
+import { toast } from 'react-toastify';
 
 export default function MemberNotifications() {
-    
-    // --- 1. DỮ LIỆU MẪU PHONG PHÚ HƠN ---
-    const [notifications, setNotifications] = useState([
-        {
-            id: 1,
-            type: 'urgent', // Cấp bách
-            title: "CẢNH BÁO: Hạn nộp bài Assignment 3",
-            message: "Bạn chỉ còn 2 giờ để nộp bài tập cuối khóa 'Digital Marketing'. Sau thời gian này hệ thống sẽ khóa nộp bài.",
-            time: "10 phút trước",
-            isRead: false,
-            action: "Nộp bài ngay"
-        },
-        {
-            id: 2,
-            type: 'schedule', // Lịch học
-            title: "Lớp học Live: Luyện phát âm IPA bắt đầu",
-            message: "Phòng học trực tuyến với Giảng viên Robert đã mở. Hãy tham gia ngay để không bỏ lỡ nội dung đầu giờ.",
-            time: "30 phút trước",
-            isRead: false,
-            action: "Vào lớp (Zoom)"
-        },
-        {
-            id: 3,
-            type: 'feedback', // Phản hồi GV
-            title: "Giảng viên đã chấm bài viết của bạn",
-            message: "Cô Sarah đã để lại nhận xét chi tiết cho bài Essay Unit 5. Điểm số: 8.5/10.",
-            time: "2 giờ trước",
-            isRead: false,
-            action: "Xem nhận xét"
-        },
-        {
-            id: 4,
-            type: 'payment', // Tài chính
-            title: "Thanh toán thành công",
-            message: "Bạn đã đăng ký thành công khóa học 'IELTS Intensive'. Hóa đơn #INV-2024001 đã được gửi về email.",
-            time: "5 giờ trước",
-            isRead: true,
-            action: "Xem hóa đơn"
-        },
-        {
-            id: 5,
-            type: 'discussion', // Thảo luận
-            title: "Có phản hồi mới trong thảo luận",
-            message: "Nguyễn Văn B và 3 người khác đã trả lời bình luận của bạn trong chủ đề 'Cách học từ vựng hiệu quả'.",
-            time: "1 ngày trước",
-            isRead: true,
-            action: "Xem thảo luận"
-        },
-        {
-            id: 6,
-            type: 'system', // Hệ thống
-            title: "Bảo trì hệ thống định kỳ",
-            message: "Hệ thống sẽ tạm ngưng phục vụ để nâng cấp từ 00:00 đến 02:00 ngày 25/03. Xin lỗi vì sự bất tiện này.",
-            time: "1 ngày trước",
-            isRead: true,
-        },
-        {
-            id: 7,
-            type: 'promotion', // Khuyến mãi
-            title: "Ưu đãi sinh nhật thành viên",
-            message: "Chúc mừng sinh nhật! Tặng bạn mã giảm giá 30% cho tất cả khóa học trong tháng này. Mã: HPBD30",
-            time: "2 ngày trước",
-            isRead: true,
-            action: "Lấy mã ngay"
-        },
-        {
-            id: 8,
-            type: 'exam', // Bài thi
-            title: "Kết quả bài thi thử TOEIC",
-            message: "Bạn đã hoàn thành bài thi thử với số điểm 650/990. Hãy xem phân tích chi tiết để cải thiện.",
-            time: "3 ngày trước",
-            isRead: true,
-            action: "Xem kết quả"
-        },
-        {
-            id: 9,
-            type: 'info',
-            title: "Cập nhật tài liệu học tập",
-            message: "Slide bài giảng Unit 1-4 đã được cập nhật phiên bản mới nhất.",
-            time: "4 ngày trước",
-            isRead: true,
-        }
-    ]);
-
+    const [notifications, setNotifications] = useState([]);
+    const [loading, setLoading] = useState(true);
     const [filter, setFilter] = useState('all');
+    const [page, setPage] = useState(1);
+    const [hasMore, setHasMore] = useState(false);
+
+    // Load notifications từ API
+    useEffect(() => {
+        const fetchNotifications = async () => {
+            try {
+                setLoading(true);
+                const result = await getMyNotifications({ 
+                    page: 1, 
+                    pageSize: 20,
+                    isRead: filter === 'unread' ? false : undefined
+                });
+                
+                // Map dữ liệu từ API sang format của component
+                const mappedNotifications = (result.notifications || result.data || result || []).map((notif) => ({
+                    id: notif.id || notif.notification_id,
+                    type: notif.type || 'info',
+                    title: notif.title || notif.subject || '',
+                    message: notif.message || notif.body || notif.content || '',
+                    time: formatTimeAgo(notif.created_at || notif.createdAt),
+                    isRead: notif.is_read || notif.isRead || false,
+                    action: notif.action_url ? 'Xem chi tiết' : null,
+                    actionUrl: notif.action_url || null
+                }));
+                
+                setNotifications(mappedNotifications);
+                setHasMore(result.pagination?.hasMore || false);
+            } catch (error) {
+                console.error('Error fetching notifications:', error);
+                toast.error('Không thể tải thông báo');
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchNotifications();
+    }, [filter]);
+
+    // Helper: Format thời gian
+    const formatTimeAgo = (dateString) => {
+        if (!dateString) return '';
+        const date = new Date(dateString);
+        const now = new Date();
+        const diffMs = now - date;
+        const diffMins = Math.floor(diffMs / 60000);
+        const diffHours = Math.floor(diffMs / 3600000);
+        const diffDays = Math.floor(diffMs / 86400000);
+
+        if (diffMins < 1) return 'Vừa xong';
+        if (diffMins < 60) return `${diffMins} phút trước`;
+        if (diffHours < 24) return `${diffHours} giờ trước`;
+        if (diffDays < 7) return `${diffDays} ngày trước`;
+        return date.toLocaleDateString('vi-VN');
+    };
 
     // --- HELPER FUNCTIONS ---
 
@@ -126,15 +101,29 @@ export default function MemberNotifications() {
     };
 
     // 3. Logic Actions
-    const markAsRead = (id) => {
-        setNotifications(notifications.map(n => n.id === id ? { ...n, isRead: true } : n));
+    const markAsRead = async (id) => {
+        try {
+            await markNotificationRead(id);
+            setNotifications(notifications.map(n => n.id === id ? { ...n, isRead: true } : n));
+        } catch (error) {
+            console.error('Error marking notification as read:', error);
+            toast.error('Không thể đánh dấu đã đọc');
+        }
     };
 
-    const markAllRead = () => {
-        setNotifications(notifications.map(n => ({ ...n, isRead: true })));
+    const markAllRead = async () => {
+        try {
+            await markAllNotificationsRead();
+            setNotifications(notifications.map(n => ({ ...n, isRead: true })));
+            toast.success('Đã đánh dấu tất cả là đã đọc');
+        } catch (error) {
+            console.error('Error marking all as read:', error);
+            toast.error('Không thể đánh dấu tất cả là đã đọc');
+        }
     };
 
     const deleteNotification = (id) => {
+        // TODO: Gọi API để xóa notification nếu có
         setNotifications(notifications.filter(n => n.id !== id));
     };
 
@@ -211,7 +200,14 @@ export default function MemberNotifications() {
 
             {/* --- LIST NOTIFICATIONS --- */}
             <div className="space-y-4">
-                {filteredList.length > 0 ? (
+                {loading ? (
+                    <div className="flex items-center justify-center py-12">
+                        <div className="text-center">
+                            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mb-4"></div>
+                            <p className="text-gray-500">Đang tải thông báo...</p>
+                        </div>
+                    </div>
+                ) : filteredList.length > 0 ? (
                     filteredList.map((item) => (
                         <div 
                             key={item.id} 
@@ -300,10 +296,39 @@ export default function MemberNotifications() {
                 )}
             </div>
 
-            {/* Load More Button (Giả lập) */}
-            {filteredList.length > 0 && (
+            {/* Load More Button */}
+            {filteredList.length > 0 && hasMore && (
                 <div className="flex justify-center pt-4">
-                    <button className="text-gray-400 font-semibold text-sm hover:text-[#5a4d8c] transition flex items-center gap-2">
+                    <button 
+                        onClick={async () => {
+                            try {
+                                const nextPage = page + 1;
+                                const result = await getMyNotifications({ 
+                                    page: nextPage, 
+                                    pageSize: 20,
+                                    isRead: filter === 'unread' ? false : undefined
+                                });
+                                
+                                const mappedNotifications = (result.notifications || result.data || []).map((notif) => ({
+                                    id: notif.id || notif.notification_id,
+                                    type: notif.type || 'info',
+                                    title: notif.title || notif.subject || '',
+                                    message: notif.message || notif.body || notif.content || '',
+                                    time: formatTimeAgo(notif.created_at || notif.createdAt),
+                                    isRead: notif.is_read || notif.isRead || false,
+                                    action: notif.action_url ? 'Xem chi tiết' : null,
+                                    actionUrl: notif.action_url || null
+                                }));
+                                
+                                setNotifications([...notifications, ...mappedNotifications]);
+                                setPage(nextPage);
+                                setHasMore(result.pagination?.hasMore || false);
+                            } catch (error) {
+                                toast.error('Không thể tải thêm thông báo');
+                            }
+                        }}
+                        className="text-gray-400 font-semibold text-sm hover:text-[#5a4d8c] transition flex items-center gap-2"
+                    >
                         Xem các thông báo cũ hơn <ArrowRight size={14} />
                     </button>
                 </div>

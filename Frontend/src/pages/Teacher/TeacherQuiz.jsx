@@ -32,6 +32,7 @@ import {
   updatePracticeCard,
   deletePracticeCard,
 } from '../../services/quizService';
+import { uploadFlashcardFile } from '../../services/uploadService';
 
 export default function TeacherQuiz() {
   const [practices, setPractices] = useState([]);
@@ -50,6 +51,7 @@ export default function TeacherQuiz() {
     category: '',
     topic: '',
   });
+  const [uploadingFile, setUploadingFile] = useState(false);
 
   // Fetch practices
   const fetchPractices = async () => {
@@ -238,11 +240,48 @@ export default function TeacherQuiz() {
     try {
       if (!managingPracticeId) return;
 
+      let imageS3Key = null;
+      let audioS3Key = null;
+
+      // Upload image if provided
+      if (values.imageFile) {
+        setUploadingFile(true);
+        try {
+          const result = await uploadFlashcardFile(values.imageFile, managingPracticeId);
+          imageS3Key = result.s3Key || result.key;
+        } catch (err) {
+          toast.error('Upload ảnh thất bại: ' + err.message);
+          setSubmitting(false);
+          setUploadingFile(false);
+          return;
+        } finally {
+          setUploadingFile(false);
+        }
+      }
+
+      // Upload audio if provided
+      if (values.audioFile) {
+        setUploadingFile(true);
+        try {
+          const result = await uploadFlashcardFile(values.audioFile, managingPracticeId);
+          audioS3Key = result.s3Key || result.key;
+        } catch (err) {
+          toast.error('Upload audio thất bại: ' + err.message);
+          setSubmitting(false);
+          setUploadingFile(false);
+          return;
+        } finally {
+          setUploadingFile(false);
+        }
+      }
+
       const payload = {
         front: values.front.trim(),
         back: values.back.trim(),
         example: values.example.trim() || '',
         orderIndex: practiceCards.length,
+        imageS3Key: imageS3Key,
+        audioS3Key: audioS3Key,
       };
 
       await createPracticeCard(managingPracticeId, payload);
@@ -261,11 +300,47 @@ export default function TeacherQuiz() {
     try {
       if (!managingPracticeId) return;
 
+      const existingCard = practiceCards.find(c => (c.id || c.cardId) === cardId);
+      let imageS3Key = existingCard?.image_s3_key || null;
+      let audioS3Key = existingCard?.audio_s3_key || null;
+
+      // Upload new image if provided
+      if (values.imageFile) {
+        setUploadingFile(true);
+        try {
+          const result = await uploadFlashcardFile(values.imageFile, managingPracticeId);
+          imageS3Key = result.s3Key || result.key;
+        } catch (err) {
+          toast.error('Upload ảnh thất bại: ' + err.message);
+          setUploadingFile(false);
+          return;
+        } finally {
+          setUploadingFile(false);
+        }
+      }
+
+      // Upload new audio if provided
+      if (values.audioFile) {
+        setUploadingFile(true);
+        try {
+          const result = await uploadFlashcardFile(values.audioFile, managingPracticeId);
+          audioS3Key = result.s3Key || result.key;
+        } catch (err) {
+          toast.error('Upload audio thất bại: ' + err.message);
+          setUploadingFile(false);
+          return;
+        } finally {
+          setUploadingFile(false);
+        }
+      }
+
       const payload = {
         front: values.front.trim(),
         back: values.back.trim(),
         example: values.example.trim() || '',
         orderIndex: values.orderIndex,
+        imageS3Key: imageS3Key,
+        audioS3Key: audioS3Key,
       };
 
       await updatePracticeCard(managingPracticeId, cardId, payload);
@@ -1053,6 +1128,8 @@ export default function TeacherQuiz() {
                     front: '',
                     back: '',
                     example: '',
+                    imageFile: null,
+                    audioFile: null,
                   }}
                   onSubmit={handleCreateCard}
                   validate={(values) => {
@@ -1066,7 +1143,7 @@ export default function TeacherQuiz() {
                     return errors;
                   }}
                 >
-                  {({ isSubmitting, resetForm }) => (
+                  {({ isSubmitting, resetForm, setFieldValue, values }) => (
                     <Form className="space-y-3">
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                         <div>
@@ -1113,14 +1190,54 @@ export default function TeacherQuiz() {
                           />
                         </div>
                       </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs text-gray-600 mb-1">
+                            Ảnh (Tùy chọn)
+                          </label>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) => {
+                              const file = e.target.files[0];
+                              setFieldValue('imageFile', file);
+                            }}
+                            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400"
+                          />
+                          {values.imageFile && (
+                            <p className="text-xs text-gray-500 mt-1">
+                              Đã chọn: {values.imageFile.name}
+                            </p>
+                          )}
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-600 mb-1">
+                            Audio (Tùy chọn)
+                          </label>
+                          <input
+                            type="file"
+                            accept="audio/*"
+                            onChange={(e) => {
+                              const file = e.target.files[0];
+                              setFieldValue('audioFile', file);
+                            }}
+                            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400"
+                          />
+                          {values.audioFile && (
+                            <p className="text-xs text-gray-500 mt-1">
+                              Đã chọn: {values.audioFile.name}
+                            </p>
+                          )}
+                        </div>
+                      </div>
                       <div className="flex justify-end">
                         <button
                           type="submit"
-                          disabled={isSubmitting}
+                          disabled={isSubmitting || uploadingFile}
                           className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700 disabled:opacity-70 disabled:cursor-not-allowed flex items-center gap-2"
                         >
                           <Plus size={16} />
-                          {isSubmitting ? 'Đang thêm...' : 'Thêm thẻ'}
+                          {isSubmitting || uploadingFile ? 'Đang xử lý...' : 'Thêm thẻ'}
                         </button>
                       </div>
                     </Form>
@@ -1173,6 +1290,8 @@ function CardItem({ card, index, onUpdate, onDelete }) {
     back: card.back || '',
     example: card.example || '',
     orderIndex: card.orderIndex || index,
+    imageFile: null,
+    audioFile: null,
   });
 
   const handleSave = () => {
@@ -1186,6 +1305,8 @@ function CardItem({ card, index, onUpdate, onDelete }) {
       back: card.back || '',
       example: card.example || '',
       orderIndex: card.orderIndex || index,
+      imageFile: null,
+      audioFile: null,
     });
     setIsEditing(false);
   };
@@ -1225,6 +1346,40 @@ function CardItem({ card, index, onUpdate, onDelete }) {
               onChange={(e) => setFormData({ ...formData, example: e.target.value })}
               className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400"
             />
+          </div>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+          <div>
+            <label className="block text-xs text-gray-600 mb-1">
+              Ảnh {card.image_s3_key && <span className="text-gray-400">(Có file hiện tại)</span>}
+            </label>
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => setFormData({ ...formData, imageFile: e.target.files[0] || null })}
+              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400"
+            />
+            {formData.imageFile && (
+              <p className="text-xs text-gray-500 mt-1">
+                File mới: {formData.imageFile.name}
+              </p>
+            )}
+          </div>
+          <div>
+            <label className="block text-xs text-gray-600 mb-1">
+              Audio {card.audio_s3_key && <span className="text-gray-400">(Có file hiện tại)</span>}
+            </label>
+            <input
+              type="file"
+              accept="audio/*"
+              onChange={(e) => setFormData({ ...formData, audioFile: e.target.files[0] || null })}
+              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400"
+            />
+            {formData.audioFile && (
+              <p className="text-xs text-gray-500 mt-1">
+                File mới: {formData.audioFile.name}
+              </p>
+            )}
           </div>
         </div>
         <div className="flex justify-end gap-2">

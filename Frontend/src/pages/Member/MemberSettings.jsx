@@ -1,22 +1,28 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
     User, Lock, Camera, Save, Mail, Phone, 
     Shield, CheckCircle, AlertCircle 
 } from 'lucide-react';
+import { uploadAvatar } from '../../services/uploadService';
+import { useAuth } from '../../contexts/AuthContext';
+import { getMyProfile, updateMyProfile } from '../../services/profileService';
 
 export default function MemberSettings() {
     // --- STATE ---
+    const { user } = useAuth();
     const [activeTab, setActiveTab] = useState('profile'); // 'profile' | 'security'
     const [isLoading, setIsLoading] = useState(false);
+    const [uploadingAvatar, setUploadingAvatar] = useState(false);
     const [notification, setNotification] = useState(null); // { type: 'success' | 'error', message: '' }
+    const [loadingProfile, setLoadingProfile] = useState(true);
 
-    // Mock Data: Thông tin học viên
+    // Thông tin học viên - lấy từ context hoặc API
     const [formData, setFormData] = useState({
-        fullName: 'Nguyễn Văn Học Viên',
-        email: 'student@example.com',
-        phone: '0987 654 321',
-        bio: 'Học viên tích cực tại English Center.',
-        avatar: null // Nếu null sẽ hiện placeholder
+        fullName: '',
+        email: '',
+        phone: '',
+        bio: '',
+        avatar: null
     });
 
     // State đổi mật khẩu
@@ -25,6 +31,39 @@ export default function MemberSettings() {
         newPassword: '',
         confirmPassword: ''
     });
+
+    // Load thông tin user từ API
+    useEffect(() => {
+        const fetchProfile = async () => {
+            try {
+                setLoadingProfile(true);
+                const profileData = await getMyProfile();
+                setFormData({
+                    fullName: profileData.fullName || '',
+                    email: profileData.email || '',
+                    phone: profileData.phone || '',
+                    bio: profileData.bio || '',
+                    avatar: profileData.avatar || null
+                });
+            } catch (error) {
+                console.error('Error fetching profile:', error);
+                // Fallback về thông tin từ context nếu API lỗi
+                if (user) {
+                    setFormData({
+                        fullName: user.userName || '',
+                        email: user.email || '',
+                        phone: '',
+                        bio: '',
+                        avatar: null
+                    });
+                }
+            } finally {
+                setLoadingProfile(false);
+            }
+        };
+
+        fetchProfile();
+    }, [user]);
 
     // --- HANDLERS ---
     const handleProfileChange = (e) => {
@@ -37,26 +76,80 @@ export default function MemberSettings() {
         setPassData({ ...passData, [name]: value });
     };
 
-    const handleAvatarChange = (e) => {
+    const handleAvatarChange = async (e) => {
         const file = e.target.files[0];
-        if (file) {
-            // Giả lập upload ảnh (tạo URL tạm thời)
-            const imageUrl = URL.createObjectURL(file);
-            setFormData({ ...formData, avatar: imageUrl });
-            showNotify('success', 'Đã cập nhật ảnh đại diện thành công!');
+        if (!file) return;
+
+        // Validate file type
+        if (!file.type.startsWith('image/')) {
+            showNotify('error', 'Vui lòng chọn file ảnh hợp lệ');
+            return;
+        }
+
+        // Validate file size (max 5MB)
+        if (file.size > 5 * 1024 * 1024) {
+            showNotify('error', 'Kích thước file không được vượt quá 5MB');
+            return;
+        }
+
+        // Hiển thị preview ngay
+        const imageUrl = URL.createObjectURL(file);
+        setFormData({ ...formData, avatar: imageUrl });
+
+        // Upload lên S3
+        setUploadingAvatar(true);
+        try {
+            const result = await uploadAvatar(file);
+            // Lưu S3 key (không phải URL) để gửi lên server
+            const s3Key = result.s3Key || result.key;
+            const avatarUrl = result.url;
+            
+            // Cập nhật avatar trong formData với URL để hiển thị
+            setFormData({ ...formData, avatar: avatarUrl });
+            
+            // Tự động lưu avatar vào profile
+            try {
+                await updateMyProfile({ avatar: s3Key });
+            } catch (updateError) {
+                console.error('Error updating avatar in profile:', updateError);
+            }
+            
+            showNotify('success', 'Đã upload ảnh đại diện thành công!');
+        } catch (error) {
+            showNotify('error', error.message || 'Upload ảnh thất bại');
+        } finally {
+            setUploadingAvatar(false);
         }
     };
 
-    const handleSaveProfile = () => {
+    const handleSaveProfile = async () => {
         setIsLoading(true);
-        // Giả lập API call
-        setTimeout(() => {
-            setIsLoading(false);
+        try {
+            const updated = await updateMyProfile({
+                fullName: formData.fullName,
+                phone: formData.phone,
+                bio: formData.bio,
+                avatar: formData.avatar
+            });
+            
+            // Cập nhật lại formData với dữ liệu từ server
+            setFormData({
+                ...formData,
+                fullName: updated.fullName || formData.fullName,
+                phone: updated.phone || formData.phone,
+                bio: updated.bio || formData.bio,
+                avatar: updated.avatar || formData.avatar
+            });
+            
             showNotify('success', 'Thông tin cá nhân đã được lưu!');
-        }, 800);
+        } catch (error) {
+            showNotify('error', error.message || 'Lưu thông tin thất bại');
+        } finally {
+            setIsLoading(false);
+        }
     };
 
-    const handleSavePassword = () => {
+    const handleSavePassword = async () => {
         if (passData.newPassword !== passData.confirmPassword) {
             showNotify('error', 'Mật khẩu xác nhận không khớp!');
             return;
@@ -67,11 +160,16 @@ export default function MemberSettings() {
         }
 
         setIsLoading(true);
-        setTimeout(() => {
-            setIsLoading(false);
+        try {
+            // TODO: Gọi API để đổi mật khẩu
+            // await changePassword(passData.currentPassword, passData.newPassword);
             setPassData({ currentPassword: '', newPassword: '', confirmPassword: '' });
             showNotify('success', 'Đổi mật khẩu thành công!');
-        }, 800);
+        } catch (error) {
+            showNotify('error', error.message || 'Đổi mật khẩu thất bại');
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     const showNotify = (type, message) => {
@@ -126,6 +224,12 @@ export default function MemberSettings() {
                     {/* --- TAB: PROFILE --- */}
                     {activeTab === 'profile' && (
                         <div className="bg-white rounded-2xl p-8 shadow-sm border border-gray-100 animate-fade-in-up">
+                            {loadingProfile ? (
+                                <div className="text-center py-8 text-gray-500">
+                                    Đang tải thông tin...
+                                </div>
+                            ) : (
+                                <>
                             <h2 className="text-lg font-bold text-gray-800 mb-6 flex items-center gap-2">
                                 <User className="text-[#5a4d8c]" size={20} /> Thông tin chung
                             </h2>
@@ -142,17 +246,33 @@ export default function MemberSettings() {
                                             </span>
                                         )}
                                     </div>
-                                    <label className="absolute bottom-0 right-0 bg-[#5a4d8c] text-white p-2 rounded-full cursor-pointer hover:bg-[#483d73] transition shadow-sm" title="Đổi ảnh đại diện">
-                                        <Camera size={16} />
-                                        <input type="file" className="hidden" accept="image/*" onChange={handleAvatarChange} />
+                                    <label className={`absolute bottom-0 right-0 bg-[#5a4d8c] text-white p-2 rounded-full cursor-pointer hover:bg-[#483d73] transition shadow-sm ${uploadingAvatar ? 'opacity-50 cursor-not-allowed' : ''}`} title="Đổi ảnh đại diện">
+                                        {uploadingAvatar ? (
+                                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                        ) : (
+                                            <Camera size={16} />
+                                        )}
+                                        <input 
+                                            type="file" 
+                                            className="hidden" 
+                                            accept="image/*" 
+                                            onChange={handleAvatarChange}
+                                            disabled={uploadingAvatar}
+                                        />
                                     </label>
                                 </div>
                                 <div>
                                     <h3 className="font-bold text-gray-800 text-lg">{formData.fullName}</h3>
                                     <p className="text-sm text-gray-500 mb-2">Học viên chính thức</p>
-                                    <label className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 transition cursor-pointer font-medium text-gray-600">
-                                        Tải ảnh mới
-                                        <input type="file" className="hidden" accept="image/*" onChange={handleAvatarChange} />
+                                    <label className={`text-xs px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 transition font-medium text-gray-600 ${uploadingAvatar ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}>
+                                        {uploadingAvatar ? 'Đang upload...' : 'Tải ảnh mới'}
+                                        <input 
+                                            type="file" 
+                                            className="hidden" 
+                                            accept="image/*" 
+                                            onChange={handleAvatarChange}
+                                            disabled={uploadingAvatar}
+                                        />
                                     </label>
                                 </div>
                             </div>
@@ -200,6 +320,20 @@ export default function MemberSettings() {
                                         className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-[#5a4d8c] focus:ring-2 focus:ring-indigo-100 outline-none text-sm transition"
                                     />
                                 </div>
+                                
+                                <div className="space-y-2 md:col-span-2">
+                                    <label className="text-sm font-semibold text-gray-600 flex items-center gap-1.5">
+                                        <User size={14}/> Giới thiệu
+                                    </label>
+                                    <textarea 
+                                        name="bio"
+                                        value={formData.bio} 
+                                        onChange={handleProfileChange}
+                                        rows="3"
+                                        className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-[#5a4d8c] focus:ring-2 focus:ring-indigo-100 outline-none text-sm transition resize-none"
+                                        placeholder="Nhập giới thiệu về bản thân..."
+                                    />
+                                </div>
                             </div>
 
                             <div className="mt-8 pt-6 border-t border-gray-100 flex justify-end">
@@ -211,6 +345,8 @@ export default function MemberSettings() {
                                     {isLoading ? 'Đang lưu...' : <><Save size={18}/> Lưu thay đổi</>}
                                 </button>
                             </div>
+                                </>
+                            )}
                         </div>
                     )}
 

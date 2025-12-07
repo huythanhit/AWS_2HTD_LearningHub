@@ -12,8 +12,14 @@ export const lectureValidationSchema = Yup.object().shape({
   contentType: Yup.string()
     .required('Loại nội dung là bắt buộc'),
   s3Key: Yup.string()
-    .required('S3 Key / URL nội dung là bắt buộc')
-    .min(5, 'S3 Key phải có ít nhất 5 ký tự'),
+    .nullable()
+    .when('$hasFile', {
+      is: true,
+      then: (schema) => schema.notRequired(),
+      otherwise: (schema) => schema
+        .required('Vui lòng chọn file hoặc nhập S3 Key')
+        .min(5, 'S3 Key phải có ít nhất 5 ký tự'),
+    }),
   durationSeconds: Yup.number()
     .required('Thời lượng là bắt buộc')
     .min(0, 'Thời lượng phải lớn hơn hoặc bằng 0')
