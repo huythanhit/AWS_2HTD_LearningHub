@@ -813,16 +813,26 @@ export const getTeacherCoursesService = async (teacherId) => {
   return result.recordset;
 };
 
-// Check 1 teacher có được gán vào course không
-export const isTeacherOfCourseService = async (courseId, teacherId) => {
+// User có phải teacher của khóa không? (creator hoặc gán trong course_teachers)
+export const isTeacherOfCourseService = async (userId, courseId) => {
   const request = await getRequest();
+  request.input("UserId", sql.UniqueIdentifier, userId);
   request.input("CourseId", sql.UniqueIdentifier, courseId);
-  request.input("TeacherId", sql.UniqueIdentifier, teacherId);
 
   const result = await request.query(`
-    SELECT TOP 1 1 AS isTeacher
+    -- Creator của course
+    SELECT TOP 1 1 AS existsFlag
+    FROM courses
+    WHERE id = @CourseId
+      AND creator_id = @UserId
+
+    UNION ALL
+
+    -- Hoặc được gán trong course_teachers
+    SELECT TOP 1 1 AS existsFlag
     FROM course_teachers
-    WHERE course_id = @CourseId AND teacher_id = @TeacherId;
+    WHERE course_id = @CourseId
+      AND teacher_id = @UserId;
   `);
 
   return result.recordset.length > 0;
@@ -857,3 +867,50 @@ export const getLecturesByTeacherInCourseService = async (courseId, teacherId) =
 
   return result.recordset;
 };
+
+//Lấy chi tiết 1 bài giảng trong 1 khóa học
+export const getLectureDetailService = async (courseId, lectureId) => {
+  const request = await getRequest();
+
+  request.input("CourseId", sql.UniqueIdentifier, courseId);
+  request.input("LectureId", sql.UniqueIdentifier, lectureId);
+
+  const result = await request.query(`
+    SELECT
+      l.id AS lectureId,
+      l.course_id AS courseId,
+      l.title,
+      l.content_type AS contentType,   -- video / article / slide
+      l.s3_key AS s3Key,
+      l.duration_seconds AS durationSeconds,
+      l.order_index AS orderIndex,
+      l.published,
+      l.created_at AS createdAt,
+      l.updated_at AS updatedAt
+    FROM lectures l
+    WHERE l.id = @LectureId
+      AND l.course_id = @CourseId
+      AND l.published = 1;
+  `);
+
+  if (result.recordset.length === 0) return null;
+
+  return result.recordset[0];
+};
+
+// User đã enroll khóa học chưa?
+export const isUserEnrolledInCourseService = async (userId, courseId) => {
+  const request = await getRequest();
+  request.input("UserId", sql.UniqueIdentifier, userId);
+  request.input("CourseId", sql.UniqueIdentifier, courseId);
+
+  const result = await request.query(`
+    SELECT TOP 1 1 AS existsFlag
+    FROM enrollments
+    WHERE user_id = @UserId
+      AND course_id = @CourseId;
+  `);
+
+  return result.recordset.length > 0;
+};
+

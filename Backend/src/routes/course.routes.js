@@ -10,7 +10,7 @@ import {
   updateLecture,
   deleteLecture,
   getCourseLectures,
-  getPublishedCourses,
+  getPublishedCourses,          
   getCourseDetail,
   enrollCourse,
   updateLectureProgress,
@@ -20,6 +20,7 @@ import {
   getTeacherCourses,
   getLecturesByTeacherInCourse,
 } from "../controllers/course.controller.js";
+
 
 import { authMiddleware } from "../middlewares/auth.middleware.js";
 
@@ -98,7 +99,7 @@ router.get("/teacher/courses", authMiddleware, getTeacherCourses);
 
 // =============== PUBLIC / MEMBER ===============
 
-// List course đã publish
+// PUBLIC / MEMBER – danh sách khoá học public
 router.get("/courses", getPublishedCourses);
 
 // Chi tiết 1 course
@@ -117,6 +118,7 @@ router.post(
   authMiddleware,
   updateLectureProgress
 );
+
 
 // My courses
 router.get("/my/courses", authMiddleware, getMyCourses);
