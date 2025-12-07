@@ -237,7 +237,7 @@ export default function MemberTests() {
                                             : 'bg-gray-100 text-gray-400 cursor-not-allowed'
                                     }`}
                             >
-                                {'Xem chi tiết'}
+                                {'Làm bài'}
                                 {test.status === 'available' && <ArrowRight size={16} />}
                             </button>
                         </div>

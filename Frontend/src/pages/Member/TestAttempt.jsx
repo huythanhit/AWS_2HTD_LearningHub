@@ -101,14 +101,40 @@ export default function TestAttempt() {
     setSubmitting(true);
     setSubmissionResult(null);
     try {
-      // Backend expects each answer item to use `answer` (single value or array)
-      // instead of `choices`. Convert local answers map to that shape.
+      // Build payload in the shape expected by backend validators/graders.
+      // For choice-based questions the backend expects: { answer: { selectedOptionIndexes: [..] } }
+      // For short answer: { answer: { text: '...' } }
       const payload = Object.entries(answers).map(([qId, choiceIdxs]) => {
-        // normalize to either single value or array depending on length
-        const answerValue = Array.isArray(choiceIdxs)
-          ? (choiceIdxs.length === 1 ? choiceIdxs[0] : choiceIdxs)
-          : choiceIdxs;
-        return { questionId: qId, answer: answerValue };
+        // find question metadata from exam to know the type
+        const question = (exam?.questions || []).find((q) => {
+          const key = q.question_id ?? q.exam_question_id ?? q.questionId ?? q.id;
+          return String(key) === String(qId);
+        });
+
+        // Normalize selected indexes into an array of numbers
+        const normalizeIndexes = (v) => {
+          if (v == null) return [];
+          if (Array.isArray(v)) return v.map((n) => Number(n));
+          return [Number(v)];
+        };
+
+        if (question) {
+          const type = question.type;
+          const isChoice = ['single_choice', 'multiple_choice', 'true_false', 'true_false_ng', 'image_choice', 'audio_choice'].includes(type);
+          if (isChoice) {
+            const selected = normalizeIndexes(choiceIdxs).filter((n) => !Number.isNaN(n));
+            return { questionId: qId, answer: { selectedOptionIndexes: selected } };
+          }
+
+          if (type === 'short_answer') {
+            // store as text
+            const text = Array.isArray(choiceIdxs) ? (choiceIdxs[0] ?? '') : (choiceIdxs ?? '');
+            return { questionId: qId, answer: { text } };
+          }
+        }
+
+        // Fallback: send the raw value wrapped as answer
+        return { questionId: qId, answer: Array.isArray(choiceIdxs) ? choiceIdxs : choiceIdxs };
       });
       const res = await submitExam(submissionId, payload);
       // res expected: { submissionId, totalScore, result: {...} }
@@ -223,8 +249,8 @@ export default function TestAttempt() {
 
             <div className="mt-4 flex justify-end gap-2">
               <button onClick={() => navigate('/member/test')} className="px-4 py-2 border rounded-lg">Quay lại danh sách</button>
-              {submissionResult?.submissionId && (
-                <button onClick={() => navigate(`/member/submission/${submissionResult.submissionId}`)} className="px-4 py-2 bg-[#8c78ec] text-white rounded-lg">Xem chi tiết</button>
+              {(submissionResult?.submissionId || submissionId) && (
+                <button onClick={() => navigate(`/member/submission/${submissionResult?.submissionId || submissionId}`)} className="px-4 py-2 bg-[#8c78ec] text-white rounded-lg">Xem chi tiết</button>
               )}
             </div>
           </div>
