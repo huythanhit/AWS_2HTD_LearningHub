@@ -80,8 +80,32 @@ export default function LoginPage() {
         
             navigate(path); // Thực hiện chuyển hướng
         } catch (error) {
-            console.error(error.message);
-            alert("Đăng nhập thất bại: " + error.message);
+            console.error('Login error:', error);
+            
+            // Lấy thông tin lỗi từ response
+            const errorResponse = error.response?.data;
+            const errorMessage = errorResponse?.message || error.message || '';
+            const errorStatus = error.response?.status;
+            
+            // Kiểm tra lỗi email chưa xác thực
+            // Backend trả về status 403 và message "User not confirmed (please verify email)"
+            const isEmailNotVerified = 
+                errorStatus === 403 ||
+                errorMessage.toLowerCase().includes('not confirmed') ||
+                errorMessage.toLowerCase().includes('verify email') ||
+                errorMessage.toLowerCase().includes('email not verified') ||
+                errorMessage.toLowerCase().includes('user not confirmed');
+            
+            if (isEmailNotVerified) {
+                // Chuyển hướng đến trang xác thực email
+                setUserEmail(email);
+                setSavedPassword(password);
+                setShowVerifyEmail(true);
+                return;
+            }
+            
+            // Hiển thị lỗi cho các trường hợp khác
+            alert("Đăng nhập thất bại: " + errorMessage);
         }
     };
 
