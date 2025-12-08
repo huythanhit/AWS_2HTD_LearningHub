@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { login } from '../services/authService';
 import VerifyEmail from '../components/VerifyEmail'; 
 
@@ -50,6 +50,28 @@ export default function LoginPage() {
     const [userEmail, setUserEmail] = useState('');
     const [savedPassword, setSavedPassword] = useState(''); // Lưu password tạm để đăng nhập lại sau verify
     const navigate = useNavigate();
+    const location = useLocation();
+
+    // Helper function để hiển thị thông báo
+    const showNotify = (type, message) => {
+        if (window.showGlobalPopup) {
+            window.showGlobalPopup({ type, message });
+        } else {
+            alert(message);
+        }
+    };
+
+    // Kiểm tra nếu có thông báo từ forgot password page
+    useEffect(() => {
+        if (location.state?.message) {
+            showNotify('success', location.state.message);
+            if (location.state.email) {
+                setEmail(location.state.email);
+            }
+            // Xóa state để không hiển thị lại khi refresh
+            window.history.replaceState({}, document.title);
+        }
+    }, [location.state]);
 
     const handleLogin = async (e) => {
         e.preventDefault();
@@ -190,11 +212,16 @@ export default function LoginPage() {
                             />
                         </div>
 
-                        <div>
-                            <div className="flex justify-between mb-1">
-                                <label className="block text-sm font-medium text-gray-700">Mật khẩu</label>
-                                <a href="#" className={`text-xs font-semibold ${primaryText} hover:underline`}>Quên mật khẩu?</a>
-                            </div>
+                        <div>
+                            <div className="flex justify-between mb-1">
+                                <label className="block text-sm font-medium text-gray-700">Mật khẩu</label>
+                                <Link 
+                                    to={`/auth/forgot-password${email ? `?email=${encodeURIComponent(email)}` : ''}`}
+                                    className={`text-xs font-semibold ${primaryText} hover:underline`}
+                                >
+                                    Quên mật khẩu?
+                                </Link>
+                            </div>
                             <div className="relative">
                                 <input
                                     type={showPassword ? "text" : "password"}
