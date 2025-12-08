@@ -8,6 +8,7 @@ import Layout from "../components/layout/Layout";
 import HomePage from "../pages/HomePage";
 import LoginPage from "../pages/LoginPage";
 import RegisterPage from "../pages/RegisterPage";
+import ForgotPasswordPage from "../pages/ForgotPasswordPage";
 import {
   MemberDashboardLayout,
   TeacherDashboardLayout,
@@ -63,6 +64,7 @@ const routes = createBrowserRouter([
     children: [
       { path: "login", element: <LoginPage /> },
       { path: "register", element: <RegisterPage /> },
+      { path: "forgot-password", element: <ForgotPasswordPage /> },
       { index: true, element: <Navigate to="/auth/login" replace /> },
     ],
   },
