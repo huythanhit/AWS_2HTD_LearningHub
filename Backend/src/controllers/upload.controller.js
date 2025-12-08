@@ -213,6 +213,44 @@ export const deleteFile = async (req, res) => {
 };
 
 /**
+ * POST /api/upload-image
+ * Upload image đơn giản (tương tự API tham khảo)
+ * Nhận binary file, trả về URL
+ */
+export const uploadImage = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: 'No file provided' });
+    }
+
+    // Chỉ cho phép image
+    if (!req.file.mimetype.startsWith('image/')) {
+      return res.status(400).json({ message: 'Only image files are allowed' });
+    }
+
+    const prefix = 'uploads'; // Folder như API tham khảo
+    const result = await uploadFileToS3(
+      req.file.buffer,
+      prefix,
+      req.file.originalname,
+      req.file.mimetype
+    );
+
+    return res.status(200).json({
+      message: 'Upload thành công',
+      urls: [result.url],
+      folder: prefix,
+    });
+  } catch (err) {
+    console.error('uploadImage error:', err);
+    return res.status(500).json({
+      message: 'Failed to upload image',
+      error: err.message,
+    });
+  }
+};
+
+/**
  * GET /api/upload/presigned/:s3Key
  * Generate presigned URL để download file private
  */

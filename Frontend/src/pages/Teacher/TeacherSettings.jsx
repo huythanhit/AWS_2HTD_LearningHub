@@ -3,8 +3,7 @@ import {
     Save, Lock, User, Mail, Phone, Camera,
     CheckCircle, AlertCircle
 } from 'lucide-react';
-import { uploadAvatar } from '../../services/uploadService';
-import { getMyProfile, updateMyProfile } from '../../services/profileService';
+import { getMyProfile, updateMyProfile, uploadImage } from '../../services/profileService';
 import { forgotPassword, resetPassword } from '../../services/authService';
 
 export default function TeacherSettings() {
@@ -13,6 +12,7 @@ export default function TeacherSettings() {
     const [uploadingAvatar, setUploadingAvatar] = useState(false);
     const [loadingProfile, setLoadingProfile] = useState(true);
     const [notification, setNotification] = useState(null);
+    const [avatarFile, setAvatarFile] = useState(null); // File ảnh mới chưa upload
 
     // Thông tin giáo viên - lấy từ API
     const [formData, setFormData] = useState({
@@ -67,59 +67,72 @@ export default function TeacherSettings() {
         setPassData({ ...passData, [name]: value });
     };
 
-    const handleAvatarChange = async (e) => {
+    const handleAvatarChange = (e) => {
         const file = e.target.files[0];
         if (!file) return;
 
         // Validate file type
-        if (!file.type.startsWith('image/')) {
-            showNotify('error', 'Vui lòng chọn file ảnh hợp lệ');
+        const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+        if (!allowedTypes.includes(file.type)) {
+            showNotify('error', 'Vui lòng chọn file ảnh hợp lệ (JPEG, PNG, GIF, WebP)');
             return;
         }
 
-        // Validate file size (max 5MB)
-        if (file.size > 5 * 1024 * 1024) {
-            showNotify('error', 'Kích thước file không được vượt quá 5MB');
+        // Validate file size (max 500MB theo API mới)
+        const maxSize = 500 * 1024 * 1024; // 500MB
+        if (file.size > maxSize) {
+            showNotify('error', 'Kích thước file không được vượt quá 500MB');
             return;
         }
 
-        // Hiển thị preview ngay
+        // Lưu file để upload sau khi bấm Lưu
+        setAvatarFile(file);
+        
+        // Hiển thị preview ngay (local URL)
         const imageUrl = URL.createObjectURL(file);
         setFormData({ ...formData, avatar: imageUrl });
-
-        // Upload lên S3
-        setUploadingAvatar(true);
-        try {
-            const result = await uploadAvatar(file);
-            const s3Key = result.s3Key || result.key;
-            const avatarUrl = result.url;
-
-            // Cập nhật avatar trong formData với URL để hiển thị
-            setFormData({ ...formData, avatar: avatarUrl });
-
-            // Tự động lưu avatar vào profile
-            try {
-                await updateMyProfile({ avatar: s3Key });
-            } catch (updateError) {
-                console.error('Error updating avatar in profile:', updateError);
-            }
-
-            showNotify('success', 'Đã upload ảnh đại diện thành công!');
-        } catch (error) {
-            showNotify('error', error.message || 'Upload ảnh thất bại');
-        } finally {
-            setUploadingAvatar(false);
-        }
     };
 
     const handleSaveProfile = async () => {
         setIsLoading(true);
+        setUploadingAvatar(false);
+        
         try {
+            let avatarUrl = formData.avatar;
+            
+            // Nếu có file ảnh mới, upload trước
+            if (avatarFile) {
+                setUploadingAvatar(true);
+                try {
+                    const uploadResult = await uploadImage(avatarFile);
+                    avatarUrl = uploadResult.urls?.[0];
+                    
+                    if (!avatarUrl) {
+                        throw new Error('Không nhận được URL ảnh từ server');
+                    }
+                    
+                    // Giải phóng object URL cũ
+                    if (formData.avatar && formData.avatar.startsWith('blob:')) {
+                        URL.revokeObjectURL(formData.avatar);
+                    }
+                    
+                    setFormData({ ...formData, avatar: avatarUrl });
+                    setAvatarFile(null); // Xóa file sau khi upload thành công
+                } catch (uploadError) {
+                    setUploadingAvatar(false);
+                    showNotify('error', uploadError.message || 'Upload ảnh thất bại');
+                    return; // Dừng lại nếu upload thất bại
+                } finally {
+                    setUploadingAvatar(false);
+                }
+            }
+            
+            // Update profile với thông tin mới
             const updated = await updateMyProfile({
                 fullName: formData.fullName,
                 phone: formData.phone,
                 bio: formData.bio,
-                avatar: formData.avatar
+                ...(avatarUrl && { avatar: avatarUrl }) // Chỉ gửi avatar nếu có
             });
 
             // Cập nhật lại formData với dữ liệu từ server
@@ -249,32 +262,28 @@ export default function TeacherSettings() {
                                                 </span>
                                             )}
                                         </div>
-                                        <label className={`absolute bottom-0 right-0 bg-[#5a4d8c] text-white p-2 rounded-full cursor-pointer hover:bg-[#483d73] transition shadow-sm ${uploadingAvatar ? 'opacity-50 cursor-not-allowed' : ''}`} title="Đổi ảnh đại diện">
-                                            {uploadingAvatar ? (
-                                                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                                            ) : (
-                                                <Camera size={16} />
-                                            )}
+                                        <label className="absolute bottom-0 right-0 bg-[#5a4d8c] text-white p-2 rounded-full cursor-pointer hover:bg-[#483d73] transition shadow-sm" title="Đổi ảnh đại diện">
+                                            <Camera size={16} />
                                             <input 
                                                 type="file" 
                                                 className="hidden" 
                                                 accept="image/*" 
                                                 onChange={handleAvatarChange}
-                                                disabled={uploadingAvatar}
+                                                disabled={isLoading || uploadingAvatar}
                                             />
                                         </label>
                                     </div>
                                     <div>
                                         <h4 className="font-bold text-gray-800 text-lg">{formData.fullName || 'Giáo viên'}</h4>
                                         <p className="text-sm text-gray-500 mb-2">Giáo viên chính thức</p>
-                                        <label className={`text-xs px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 transition font-medium text-gray-600 ${uploadingAvatar ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}>
-                                            {uploadingAvatar ? 'Đang upload...' : 'Tải ảnh mới'}
+                                        <label className={`text-xs px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 transition font-medium text-gray-600 cursor-pointer ${(isLoading || uploadingAvatar) ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                                            {avatarFile ? 'Ảnh đã chọn (chưa lưu)' : 'Tải ảnh mới'}
                                             <input 
                                                 type="file" 
                                                 className="hidden" 
                                                 accept="image/*" 
                                                 onChange={handleAvatarChange}
-                                                disabled={uploadingAvatar}
+                                                disabled={isLoading || uploadingAvatar}
                                             />
                                         </label>
                                     </div>
@@ -332,10 +341,10 @@ export default function TeacherSettings() {
                                 <div className="mt-6 text-right">
                                     <button 
                                         onClick={handleSaveProfile}
-                                        disabled={isLoading}
-                                        className="bg-[#5a4d8c] text-white px-6 py-2 rounded-lg hover:bg-[#483d73] transition flex items-center gap-2 ml-auto disabled:opacity-70"
+                                        disabled={isLoading || uploadingAvatar}
+                                        className="bg-[#5a4d8c] text-white px-6 py-2 rounded-lg hover:bg-[#483d73] transition flex items-center gap-2 ml-auto disabled:opacity-70 disabled:cursor-not-allowed"
                                     >
-                                        {isLoading ? 'Đang lưu...' : <><Save size={18} /> Lưu thay đổi</>}
+                                        {uploadingAvatar ? 'Đang upload ảnh...' : isLoading ? 'Đang lưu...' : <><Save size={18} /> Lưu thay đổi</>}
                                     </button>
                                 </div>
                             </>

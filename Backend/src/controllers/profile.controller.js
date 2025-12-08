@@ -2,7 +2,8 @@
 // Controller để user tự quản lý profile của mình
 
 import { findUserByIdWithProfile, updateUserProfile } from '../models/user.model.js';
-import { generatePresignedDownloadUrl } from '../services/s3.service.js';
+import { extractS3Key, deleteFileFromS3 } from '../services/s3.service.js';
+import { getS3Url } from '../config/s3.js';
 import { successResponse } from '../utils/response.js';
 
 /**
@@ -27,16 +28,10 @@ export async function getMyProfile(req, res, next) {
       throw err;
     }
 
-    // Tạo presigned URL cho avatar nếu có (bucket private)
+    // Tạo public URL cho avatar nếu có (bucket public)
     let avatarUrl = null;
     if (user.avatar_s3_key) {
-      try {
-        avatarUrl = await generatePresignedDownloadUrl(user.avatar_s3_key, 3600); // 1 giờ
-      } catch (s3Error) {
-        console.error('Error generating presigned URL for avatar:', s3Error);
-        // Nếu lỗi, vẫn trả về null thay vì throw error
-        avatarUrl = null;
-      }
+      avatarUrl = getS3Url(user.avatar_s3_key);
     }
 
     return successResponse(res, {
@@ -55,8 +50,9 @@ export async function getMyProfile(req, res, next) {
 }
 
 /**
- * PATCH /api/my/profile
+ * PUT /api/my/profile
  * Cập nhật thông tin profile của user hiện tại
+ * Nhận avatar là URL từ API upload-image
  */
 export async function updateMyProfile(req, res, next) {
   try {
@@ -70,22 +66,52 @@ export async function updateMyProfile(req, res, next) {
 
     const { fullName, phone, bio, avatar } = req.body;
 
+    // Lấy user hiện tại để có avatar cũ
+    const currentUser = await findUserByIdWithProfile(userId);
+    const oldAvatarS3Key = currentUser?.avatar_s3_key;
+
+    // Extract S3 key từ avatar URL nếu có
+    let avatarS3Key = undefined; // undefined = không update, null = xóa avatar
+    if (avatar !== undefined) {
+      if (avatar && avatar.trim() !== '') {
+        // Có URL mới, extract S3 key
+        avatarS3Key = extractS3Key(avatar);
+      } else {
+        // Avatar là empty string hoặc null, xóa avatar
+        avatarS3Key = null;
+      }
+    }
+
+    // Xóa avatar cũ trên S3 nếu:
+    // 1. Có avatar mới khác avatar cũ, HOẶC
+    // 2. User muốn xóa avatar (avatarS3Key = null) và có avatar cũ
+    if (oldAvatarS3Key) {
+      const shouldDeleteOldAvatar = 
+        (avatarS3Key !== undefined && avatarS3Key !== oldAvatarS3Key) || // Avatar mới khác avatar cũ
+        (avatarS3Key === null && oldAvatarS3Key); // User muốn xóa avatar
+
+      if (shouldDeleteOldAvatar) {
+        try {
+          await deleteFileFromS3(oldAvatarS3Key);
+        } catch (deleteError) {
+          console.error('Error deleting old avatar:', deleteError);
+          // Không throw error, chỉ log để không block việc update profile
+        }
+      }
+    }
+
     const updated = await updateUserProfile(userId, {
       fullName,
       phone,
       bio,
-      avatar,
+      avatar: avatarS3Key, // undefined = không update, null = xóa, string = update
     });
 
-    // Tạo presigned URL cho avatar nếu có (bucket private)
-    let avatarUrl = null;
-    if (updated.avatar_s3_key) {
-      try {
-        avatarUrl = await generatePresignedDownloadUrl(updated.avatar_s3_key, 3600); // 1 giờ
-      } catch (s3Error) {
-        console.error('Error generating presigned URL for avatar:', s3Error);
-        avatarUrl = null;
-      }
+    // Trả về avatar URL (public URL từ S3)
+    let avatarUrl = avatar || null;
+    if (!avatarUrl && updated.avatar_s3_key) {
+      // Nếu không có URL nhưng có S3 key, tạo URL từ S3 key
+      avatarUrl = getS3Url(updated.avatar_s3_key);
     }
 
     return successResponse(res, {

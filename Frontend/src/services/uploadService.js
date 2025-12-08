@@ -36,7 +36,8 @@ export async function uploadLectureFile(file, courseId) {
 }
 
 /**
- * Upload avatar user
+ * Upload avatar user (deprecated - use profileService.uploadImage instead)
+ * @deprecated Sử dụng profileService.uploadImage() thay thế
  * @param {File} file - File ảnh avatar
  * @returns {Promise<{s3Key: string, url: string, filename: string, contentType: string, size: number}>}
  */
@@ -54,18 +55,27 @@ export async function uploadAvatar(file) {
   formData.append('file', file);
 
   try {
-    const res = await apiClient.post('/api/upload/avatar', formData, {
-      headers: {
-        // Không set Content-Type, để axios tự động set với boundary
-      },
-    });
+    // Sử dụng endpoint mới /api/upload/image
+    const res = await apiClient.post('/api/upload/image', formData);
 
     const result = res.data;
-    if (result && result.data) {
-      return result.data;
+    // Response format mới: { message, urls: [...], folder }
+    if (result && result.urls && result.urls.length > 0) {
+      // Convert về format cũ để tương thích
+      const url = result.urls[0];
+      return {
+        url: url,
+        s3Key: url.split('/').pop() || '', // Extract key from URL
+        filename: file.name,
+        contentType: file.type,
+        size: file.size
+      };
     }
-    return result;
+    throw new Error(result.message || 'Upload failed');
   } catch (error) {
+    if (error.response?.data?.message) {
+      throw new Error(error.response.data.message);
+    }
     throw error;
   }
 }

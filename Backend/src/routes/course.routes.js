@@ -19,6 +19,7 @@ import {
   removeTeacherFromCourse,
   getTeacherCourses,
   getLecturesByTeacherInCourse,
+  getTopPopularCourses,
 } from "../controllers/course.controller.js";
 
 
@@ -98,6 +99,9 @@ router.get(
 router.get("/teacher/courses", authMiddleware, getTeacherCourses);
 
 // =============== PUBLIC / MEMBER ===============
+
+// Top 5 khóa học phổ biến nhất (public, không cần auth)
+router.get("/courses/top-popular", getTopPopularCourses);
 
 // PUBLIC / MEMBER – danh sách khoá học public
 router.get("/courses", getPublishedCourses);

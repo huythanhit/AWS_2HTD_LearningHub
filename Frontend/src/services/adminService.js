@@ -294,3 +294,26 @@ export async function deleteCourseLecture(courseId, lectureId) {
         normalizeAndThrow(err);
     }
 }
+
+// [MỚI] GET TOP POPULAR COURSES
+export async function getTopPopularCourses() {
+    try {
+        const res = await apiClient.get("/api/courses/top-popular");
+        const result = res.data;
+        
+        // API trả về array trực tiếp: [{ name, students }, ...]
+        if (Array.isArray(result)) {
+            return result;
+        }
+        
+        // Nếu có wrapper, thử lấy data
+        if (result && Array.isArray(result.data)) {
+            return result.data;
+        }
+        
+        return [];
+    } catch (err) {
+        console.error("GET TOP POPULAR COURSES ERROR:", err);
+        normalizeAndThrow(err);
+    }
+}

@@ -6,6 +6,7 @@ import {
   uploadLectureFile,
   uploadAvatar,
   uploadFlashcardFile,
+  uploadImage,
   deleteFile,
   getPresignedUrl,
 } from '../controllers/upload.controller.js';
@@ -24,6 +25,9 @@ router.post('/avatar', uploadSingle, uploadAvatar);
 
 // Upload file flashcard
 router.post('/flashcard', uploadSingle, uploadFlashcardFile);
+
+// Upload image (theo format code mẫu)
+router.post('/image', uploadSingle, uploadImage);
 
 // Delete file
 router.delete('/:s3Key', deleteFile);

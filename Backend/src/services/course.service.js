@@ -914,3 +914,26 @@ export const isUserEnrolledInCourseService = async (userId, courseId) => {
   return result.recordset.length > 0;
 };
 
+// Lấy top 5 khóa học phổ biến nhất (dựa trên số lượng học viên đã enroll)
+export const getTopPopularCoursesService = async (limit = 5) => {
+  const request = await getRequest();
+  request.input("Limit", sql.Int, limit);
+
+  const result = await request.query(`
+    SELECT TOP (@Limit)
+      c.id AS courseId,
+      c.title AS name,
+      COUNT(e.id) AS students
+    FROM courses c
+    LEFT JOIN enrollments e ON e.course_id = c.id
+    WHERE c.published = 1
+    GROUP BY c.id, c.title
+    ORDER BY students DESC, c.title ASC;
+  `);
+
+  return result.recordset.map(row => ({
+    name: row.name,
+    students: row.students || 0
+  }));
+};
+

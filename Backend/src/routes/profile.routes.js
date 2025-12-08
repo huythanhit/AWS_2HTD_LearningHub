@@ -11,7 +11,7 @@ router.use(authMiddleware);
 // GET /api/my/profile - Lấy thông tin profile của user hiện tại
 router.get('/my/profile', profileController.getMyProfile);
 
-// PATCH /api/my/profile - Cập nhật thông tin profile của user hiện tại
-router.patch('/my/profile', profileController.updateMyProfile);
+// PUT /api/my/profile - Cập nhật thông tin profile của user hiện tại
+router.put('/my/profile', profileController.updateMyProfile);
 
 export default router;

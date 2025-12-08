@@ -19,6 +19,7 @@ import {
   getTeacherCoursesService,
   getLecturesByTeacherInCourseService,
   isTeacherOfCourseService,
+  getTopPopularCoursesService,
 } from "../services/course.service.js";
 
 // ===== Helpers: lấy userId & roleId từ req.user =====
@@ -732,6 +733,21 @@ export const getLecturesByTeacherInCourse = async (req, res) => {
     });
   } catch (err) {
     console.error("getLecturesByTeacherInCourse error:", err);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+// GET /api/courses/top-popular
+// Lấy top 5 khóa học phổ biến nhất (dựa trên số lượng học viên)
+export const getTopPopularCourses = async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 5;
+    
+    const topCourses = await getTopPopularCoursesService(limit);
+    
+    return res.status(200).json(topCourses);
+  } catch (err) {
+    console.error("getTopPopularCourses error:", err);
     return res.status(500).json({ message: "Internal server error" });
   }
 };

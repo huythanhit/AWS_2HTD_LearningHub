@@ -25,8 +25,8 @@ export async function uploadFileToS3(fileBuffer, prefix, filename, contentType) 
     Key: key,
     Body: fileBuffer,
     ContentType: contentType,
-    // Cho phép public read (tùy chọn, có thể bỏ nếu muốn private)
-    // ACL: 'public-read',
+    // Không dùng ACL vì bucket đang ở chế độ "Bucket owner enforced"
+    // File sẽ public nhờ Bucket Policy đã cấu hình
   });
 
   await s3Client.send(command);
