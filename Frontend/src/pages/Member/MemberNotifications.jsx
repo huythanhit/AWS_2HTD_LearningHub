@@ -7,6 +7,7 @@ import {
     MessageCircle, Wallet, FileText, Zap, X
 } from 'lucide-react';
 import { getMyNotifications, markNotificationRead, markAllNotificationsRead } from '../../services/notificationService';
+import useUnreadNotifications from '../../hooks/useUnreadNotifications';
 import { toast } from 'react-toastify';
 
 export default function MemberNotifications() {
@@ -15,16 +16,23 @@ export default function MemberNotifications() {
     const [filter, setFilter] = useState('all');
     const [page, setPage] = useState(1);
     const [hasMore, setHasMore] = useState(false);
+    
+    // Lấy unread count để refresh sidebar
+    const { refreshUnreadCount } = useUnreadNotifications();
 
     // Load notifications từ API
     useEffect(() => {
         const fetchNotifications = async () => {
             try {
                 setLoading(true);
+                let isReadParam = undefined;
+                if (filter === 'unread') isReadParam = false;
+                else if (filter === 'read') isReadParam = true;
+                
                 const result = await getMyNotifications({ 
                     page: 1, 
                     pageSize: 20,
-                    isRead: filter === 'unread' ? false : undefined
+                    isRead: isReadParam
                 });
                 
                 // Map dữ liệu từ API sang format của component
@@ -335,7 +343,9 @@ export default function MemberNotifications() {
     const markAsRead = async (id) => {
         try {
             await markNotificationRead(id);
-        setNotifications(notifications.map(n => n.id === id ? { ...n, isRead: true } : n));
+            setNotifications(notifications.map(n => n.id === id ? { ...n, isRead: true } : n));
+            // Refresh unread count trong sidebar
+            refreshUnreadCount();
         } catch (error) {
             console.error('Error marking notification as read:', error);
             toast.error('Không thể đánh dấu đã đọc');
@@ -345,7 +355,9 @@ export default function MemberNotifications() {
     const markAllRead = async () => {
         try {
             await markAllNotificationsRead();
-        setNotifications(notifications.map(n => ({ ...n, isRead: true })));
+            setNotifications(notifications.map(n => ({ ...n, isRead: true })));
+            // Refresh unread count trong sidebar
+            refreshUnreadCount();
             toast.success('Đã đánh dấu tất cả là đã đọc');
         } catch (error) {
             console.error('Error marking all as read:', error);
@@ -357,6 +369,7 @@ export default function MemberNotifications() {
     const filteredList = notifications.filter(n => {
         if (filter === 'all') return true;
         if (filter === 'unread') return !n.isRead;
+        if (filter === 'read') return n.isRead;
         // Gom nhóm các loại khác nhau vào 1 tab 'system' nếu muốn, hoặc filter chính xác
         return n.type === filter;
     });
@@ -395,9 +408,7 @@ export default function MemberNotifications() {
                     {[
                         { key: 'all', label: 'Tất cả' },
                         { key: 'unread', label: 'Chưa đọc' },
-                        { key: 'urgent', label: 'Quan trọng' },
-                        { key: 'schedule', label: 'Lịch học' },
-                        { key: 'payment', label: 'Tài chính' }
+                        { key: 'read', label: 'Đã đọc' }
                     ].map(tab => (
                         <button
                             key={tab.key}
@@ -553,10 +564,14 @@ export default function MemberNotifications() {
                         onClick={async () => {
                             try {
                                 const nextPage = page + 1;
+                                let isReadParam = undefined;
+                                if (filter === 'unread') isReadParam = false;
+                                else if (filter === 'read') isReadParam = true;
+                                
                                 const result = await getMyNotifications({ 
                                     page: nextPage, 
                                     pageSize: 20,
-                                    isRead: filter === 'unread' ? false : undefined
+                                    isRead: isReadParam
                                 });
                                 
                                 const notificationsList = result.notifications || [];

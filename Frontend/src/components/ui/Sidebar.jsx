@@ -64,8 +64,8 @@ export default function Sidebar({
     onMouseEnter, 
     onMouseLeave, 
     isMobileOpen, 
-    onClose 
-    
+    onClose,
+    unreadCount = 0 // Số lượng thông báo chưa đọc
 }) {
     const location = useLocation();
 
@@ -142,13 +142,22 @@ export default function Sidebar({
                                 const activeClasses = `${PRIMARY_BG} text-white font-semibold shadow-md`;
                                 const inactiveClasses = `text-gray-200 hover:bg-purple-700 hover:text-white`;
 
+                                // Kiểm tra nếu là menu item "Thông báo" để hiển thị badge
+                                const isNotificationItem = item.label === 'Thông báo' && item.to.includes('/notifications');
+                                
                                 return (
                                     <li key={item.to}>
                                         <Link
                                             to={item.to}
                                             className={`${itemBaseClass} ${isActive ? activeClasses : inactiveClasses}`}
                                         >
-                                            <item.icon className="w-6 h-6 flex-shrink-0" />
+                                            <div className="relative flex-shrink-0">
+                                                <item.icon className="w-6 h-6" />
+                                                {/* Badge chấm đỏ khi có thông báo chưa đọc */}
+                                                {isNotificationItem && unreadCount > 0 && (
+                                                    <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-white"></span>
+                                                )}
+                                            </div>
                                             {/* Text chỉ hiển thị/dịch chuyển trên Desktop */}
                                             <span className={desktopItemTextClass}>{item.label}</span> 
                                         </Link>
@@ -200,6 +209,9 @@ export default function Sidebar({
                                 const activeClasses = `${PRIMARY_BG} text-white font-semibold shadow-md`;
                                 const inactiveClasses = `text-gray-200 hover:bg-purple-700 hover:text-white`;
 
+                                // Kiểm tra nếu là menu item "Thông báo" để hiển thị badge
+                                const isNotificationItem = item.label === 'Thông báo' && item.to.includes('/notifications');
+                                
                                 return (
                                     <li key={item.to}>
                                         <Link
@@ -207,7 +219,13 @@ export default function Sidebar({
                                             onClick={handleLinkClick} // Đóng sidebar mobile khi click vào link
                                             className={`${itemBaseClass} ${isActive ? activeClasses : inactiveClasses}`}
                                         >
-                                            <item.icon className="w-6 h-6 flex-shrink-0 mr-3" />
+                                            <div className="relative flex-shrink-0 mr-3">
+                                                <item.icon className="w-6 h-6" />
+                                                {/* Badge chấm đỏ khi có thông báo chưa đọc */}
+                                                {isNotificationItem && unreadCount > 0 && (
+                                                    <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-white"></span>
+                                                )}
+                                            </div>
                                             <span>{item.label}</span> 
                                         </Link>
                                     </li>

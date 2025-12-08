@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { Outlet, useLocation } from 'react-router-dom'; 
 // Import Logic & UI
 import useDashboardLogic from '../../hooks/useDashboardLogic'; 
+import useUnreadNotifications from '../../hooks/useUnreadNotifications';
 import Sidebar, { memberMenuItems, teacherMenuItems, adminMenuItems } from '../ui/Sidebar';
 import Header from '../ui/Header'; 
 
@@ -22,7 +23,17 @@ export default function DashboardLayout({ menuItems = memberMenuItems, role = 'm
         toggleMobileSidebar, 
         closeMobileSidebar,  
         handleLogout 
-    } = useDashboardLogic(role); 
+    } = useDashboardLogic(role);
+
+    // Lấy số lượng thông báo chưa đọc (chỉ cho member và teacher)
+    const { unreadCount, refreshUnreadCount } = useUnreadNotifications();
+    
+    // Refresh unread count khi vào trang notifications
+    React.useEffect(() => {
+        if (location.pathname.includes('/notifications')) {
+            refreshUnreadCount();
+        }
+    }, [location.pathname, refreshUnreadCount]); 
 
     // --- LOGIC TÌM TÊN TRANG HIỆN TẠI (Giữ nguyên) ---
     const currentPageTitle = useMemo(() => {
@@ -59,6 +70,8 @@ export default function DashboardLayout({ menuItems = memberMenuItems, role = 'm
                 // Mobile props MỚI
                 isMobileOpen={isMobileSidebarOpen} 
                 onClose={closeMobileSidebar} // Hàm đóng mobile sidebar
+                // Notification badge
+                unreadCount={unreadCount}
             />
 
             {/* Main Content Area */}

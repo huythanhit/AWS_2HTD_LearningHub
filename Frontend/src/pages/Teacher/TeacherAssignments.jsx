@@ -3,13 +3,15 @@ import { toast } from 'react-toastify';
 import { 
     FileText, Plus, Trash, Save, CheckCircle, 
     Clock, AlertCircle, X, Search, MoreVertical,
-    Calendar, Users, ChevronRight, LayoutList, PenTool
+    Calendar, Users, ChevronRight, LayoutList, PenTool,
+    Image, Music, Upload
 } from 'lucide-react';
 import { 
     getExams, createExam, updateExam, createQuestion, 
     getExamQuestions, createExamQuestion, updateExamQuestion, deleteExamQuestion,
     publishExam, deleteExam, getTeacherCourses
 } from '../../services/teacherService';
+import { getPresignedUrl } from '../../services/uploadService';
 
 export default function TeacherAssignments() {
     // --- STATE & DATA ---
@@ -108,11 +110,53 @@ export default function TeacherAssignments() {
         classId: '', // Lớp được gán
         dueDate: '',
         questions: [
-            { id: 1, text: '', options: ['', '', '', ''], correct: 0 }
+            { 
+                id: 1, 
+                text: '', 
+                type: 'multiple_choice',
+                options: ['', '', '', ''], 
+                correct: 0,
+                imageFile: null,
+                audioFile: null,
+                imageS3Key: null,
+                audioS3Key: null,
+                imageUrl: null,
+                audioUrl: null
+            }
         ]
     });
 
     // --- LOGIC HANDLERS ---
+
+    // Helper: Convert file to base64
+    const fileToBase64 = (file) => {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = () => {
+                const base64 = reader.result;
+                // Extract base64 string (remove data:image/png;base64, prefix)
+                const base64String = base64.includes(',') ? base64.split(',')[1] : base64;
+                resolve({
+                    base64: base64String,
+                    filename: file.name,
+                    contentType: file.type
+                });
+            };
+            reader.onerror = error => reject(error);
+        });
+    };
+
+    // Helper: Load presigned URL for image/audio
+    const loadMediaUrl = async (s3Key, setUrl) => {
+        if (!s3Key) return;
+        try {
+            const result = await getPresignedUrl(s3Key);
+            setUrl(result.url || result);
+        } catch (error) {
+            console.error('Error loading media URL:', error);
+        }
+    };
 
     const handleCreateClick = () => {
         setEditingExamId(null);
@@ -124,7 +168,19 @@ export default function TeacherAssignments() {
             randomizeQuestions: false,
             classId: '',
             dueDate: '',
-            questions: [{ id: 1, text: '', options: ['', '', '', ''], correct: 0 }]
+            questions: [{ 
+                id: 1, 
+                text: '', 
+                type: 'multiple_choice',
+                options: ['', '', '', ''], 
+                correct: 0,
+                imageFile: null,
+                audioFile: null,
+                imageS3Key: null,
+                audioS3Key: null,
+                imageUrl: null,
+                audioUrl: null
+            }]
         });
         setView('create');
     };
@@ -146,17 +202,58 @@ export default function TeacherAssignments() {
         // Load câu hỏi từ API
         try {
             const questionsData = await getExamQuestions(exam.id);
-            const mappedQuestions = questionsData.map((q, index) => ({
-                id: q.questionId,
-                examQuestionId: q.examQuestionId,
-                text: q.body || '',
-                options: q.choices ? q.choices.map(choice => choice.text || '') : ['', '', '', ''],
-                correct: q.choices ? q.choices.findIndex(choice => choice.isCorrect === true) : 0
+            const mappedQuestions = await Promise.all(questionsData.map(async (q, index) => {
+                const question = {
+                    id: q.questionId,
+                    examQuestionId: q.examQuestionId,
+                    text: q.body || '',
+                    type: q.type || 'multiple_choice',
+                    options: q.choices ? q.choices.map(choice => choice.text || '') : ['', '', '', ''],
+                    correct: q.choices ? q.choices.findIndex(choice => choice.isCorrect === true) : 0,
+                    imageFile: null,
+                    audioFile: null,
+                    imageS3Key: q.imageS3Key || null,
+                    audioS3Key: q.audioS3Key || null,
+                    imageUrl: null,
+                    audioUrl: null
+                };
+
+                // Load presigned URLs for existing media
+                if (question.imageS3Key) {
+                    try {
+                        const result = await getPresignedUrl(question.imageS3Key);
+                        question.imageUrl = result.url || result;
+                    } catch (err) {
+                        console.error('Error loading image URL:', err);
+                    }
+                }
+                if (question.audioS3Key) {
+                    try {
+                        const result = await getPresignedUrl(question.audioS3Key);
+                        question.audioUrl = result.url || result;
+                    } catch (err) {
+                        console.error('Error loading audio URL:', err);
+                    }
+                }
+
+                return question;
             }));
             
             // Nếu không có câu hỏi, thêm một câu hỏi trống
             if (mappedQuestions.length === 0) {
-                mappedQuestions.push({ id: Date.now(), text: '', options: ['', '', '', ''], correct: 0 });
+                mappedQuestions.push({ 
+                    id: Date.now(), 
+                    text: '', 
+                    type: 'multiple_choice',
+                    options: ['', '', '', ''], 
+                    correct: 0,
+                    imageFile: null,
+                    audioFile: null,
+                    imageS3Key: null,
+                    audioS3Key: null,
+                    imageUrl: null,
+                    audioUrl: null
+                });
             }
             
             setNewExam(prev => ({
@@ -168,7 +265,19 @@ export default function TeacherAssignments() {
             // Nếu lỗi, vẫn hiển thị form với câu hỏi trống
             setNewExam(prev => ({
                 ...prev,
-                questions: [{ id: Date.now(), text: '', options: ['', '', '', ''], correct: 0 }]
+                questions: [{ 
+                    id: Date.now(), 
+                    text: '', 
+                    type: 'multiple_choice',
+                    options: ['', '', '', ''], 
+                    correct: 0,
+                    imageFile: null,
+                    audioFile: null,
+                    imageS3Key: null,
+                    audioS3Key: null,
+                    imageUrl: null,
+                    audioUrl: null
+                }]
             }));
         }
     };
@@ -177,12 +286,96 @@ export default function TeacherAssignments() {
         setNewExam(prev => ({
             ...prev,
             questions: [...prev.questions, { 
-                id: prev.questions.length + 1, 
+                id: Date.now(), 
                 text: '', 
+                type: 'multiple_choice',
                 options: ['', '', '', ''], 
-                correct: 0 
+                correct: 0,
+                imageFile: null,
+                audioFile: null,
+                imageS3Key: null,
+                audioS3Key: null,
+                imageUrl: null,
+                audioUrl: null
             }]
         }));
+    };
+
+    // Handle question type change
+    const handleQuestionTypeChange = (qIndex, newType) => {
+        const updatedQuestions = [...newExam.questions];
+        updatedQuestions[qIndex].type = newType;
+        
+        // Adjust options based on type
+        if (newType === 'true_false') {
+            updatedQuestions[qIndex].options = ['True', 'False'];
+            updatedQuestions[qIndex].correct = 0;
+        } else if (newType === 'true_false_ng') {
+            updatedQuestions[qIndex].options = ['True', 'False', 'Not Given'];
+            updatedQuestions[qIndex].correct = 0;
+        } else if (newType === 'short_answer') {
+            updatedQuestions[qIndex].options = [];
+            updatedQuestions[qIndex].correct = -1;
+        } else if (newType === 'single_choice') {
+            if (updatedQuestions[qIndex].options.length === 0) {
+                updatedQuestions[qIndex].options = ['', '', '', ''];
+            }
+            updatedQuestions[qIndex].correct = 0;
+        } else if (newType === 'multiple_choice') {
+            if (updatedQuestions[qIndex].options.length === 0) {
+                updatedQuestions[qIndex].options = ['', '', '', ''];
+            }
+            // Multiple choice uses array for correct answers
+            updatedQuestions[qIndex].correct = Array.isArray(updatedQuestions[qIndex].correct) 
+                ? updatedQuestions[qIndex].correct 
+                : [0];
+        }
+        
+        setNewExam({ ...newExam, questions: updatedQuestions });
+    };
+
+    // Handle file upload
+    const handleFileChange = async (qIndex, fileType, file) => {
+        if (!file) return;
+        
+        const updatedQuestions = [...newExam.questions];
+        const question = updatedQuestions[qIndex];
+        
+        if (fileType === 'image') {
+            question.imageFile = file;
+            // Create preview URL
+            question.imageUrl = URL.createObjectURL(file);
+        } else if (fileType === 'audio') {
+            question.audioFile = file;
+            // Create preview URL
+            question.audioUrl = URL.createObjectURL(file);
+        }
+        
+        setNewExam({ ...newExam, questions: updatedQuestions });
+    };
+
+    // Remove file
+    const handleRemoveFile = (qIndex, fileType) => {
+        const updatedQuestions = [...newExam.questions];
+        const question = updatedQuestions[qIndex];
+        
+        if (fileType === 'image') {
+            if (question.imageUrl && question.imageUrl.startsWith('blob:')) {
+                URL.revokeObjectURL(question.imageUrl);
+            }
+            question.imageFile = null;
+            question.imageUrl = null;
+            question.imageS3Key = null;
+        } else if (fileType === 'audio') {
+            if (question.audioUrl && question.audioUrl.startsWith('blob:')) {
+                URL.revokeObjectURL(question.audioUrl);
+            }
+            question.audioFile = null;
+            question.audioUrl = null;
+            question.audioS3Key = null;
+        }
+        
+        setNewExam({ ...newExam, questions: updatedQuestions });
     };
 
     const handleQuestionChange = (index, field, value) => {
@@ -287,21 +480,72 @@ export default function TeacherAssignments() {
                     // Bỏ qua câu hỏi trống
                     if (!q.text || q.text.trim() === '') continue;
                     
-                    // Lọc đáp án hợp lệ
-                    const validOptions = q.options.filter(opt => opt && opt.trim() !== '');
-                    if (validOptions.length < 2) continue; // Cần ít nhất 2 đáp án
+                    // Convert files to base64
+                    let imageFileBase64 = null;
+                    let audioFileBase64 = null;
+                    
+                    if (q.imageFile) {
+                        try {
+                            imageFileBase64 = await fileToBase64(q.imageFile);
+                        } catch (error) {
+                            console.error('Error converting image to base64:', error);
+                            toast.error(`Lỗi khi xử lý ảnh cho câu hỏi: ${error.message}`);
+                            continue;
+                        }
+                    }
+                    
+                    if (q.audioFile) {
+                        try {
+                            audioFileBase64 = await fileToBase64(q.audioFile);
+                        } catch (error) {
+                            console.error('Error converting audio to base64:', error);
+                            toast.error(`Lỗi khi xử lý audio cho câu hỏi: ${error.message}`);
+                            continue;
+                        }
+                    }
+                    
+                    // Build choices based on question type
+                    let choices = [];
+                    if (q.type === 'short_answer') {
+                        // Short answer không có choices
+                        choices = null;
+                    } else {
+                        // Lọc đáp án hợp lệ
+                        const validOptions = q.options.filter(opt => opt && opt.trim() !== '');
+                        if (validOptions.length < 2) {
+                            toast.warning(`Câu hỏi "${q.text.substring(0, 50)}..." cần ít nhất 2 đáp án`);
+                            continue;
+                        }
+                        
+                        choices = validOptions.map((opt, oIndex) => {
+                            let value = String.fromCharCode(65 + oIndex); // A, B, C, D...
+                            if (q.type === 'true_false') {
+                                value = opt === 'True' ? 'T' : 'F';
+                            } else if (q.type === 'true_false_ng') {
+                                if (opt === 'True') value = 'T';
+                                else if (opt === 'False') value = 'F';
+                                else if (opt === 'Not Given') value = 'NG';
+                            }
+                            
+                            return {
+                                text: opt,
+                                value: value,
+                                isCorrect: q.type === 'multiple_choice' 
+                                    ? (q.correct === oIndex || (Array.isArray(q.correct) && q.correct.includes(oIndex)))
+                                    : (q.correct === oIndex)
+                            };
+                        });
+                    }
                     
                     const payload = {
-                        title: `Câu hỏi: ${q.text}`,
+                        title: `Câu hỏi: ${q.text.substring(0, 100)}`,
                         body: q.text,
-                        type: "multiple_choice",
+                        type: q.type || 'multiple_choice',
                         difficulty: 2,
                         tags: ["exam", "teacher_created"],
-                        choices: validOptions.map((opt, oIndex) => ({
-                            text: opt,
-                            value: String.fromCharCode(65 + oIndex), // A, B, C, D...
-                            isCorrect: q.correct === oIndex,
-                        })),
+                        choices: choices,
+                        imageFile: imageFileBase64,
+                        audioFile: audioFileBase64
                     };
 
                     // Nếu câu hỏi đã có (có examQuestionId và questionId), cập nhật
@@ -310,6 +554,7 @@ export default function TeacherAssignments() {
                             await updateExamQuestion(examIdToUse, q.id, payload);
                         } catch (error) {
                             console.error('Error updating question:', error);
+                            toast.error(`Lỗi cập nhật câu hỏi: ${error.message}`);
                             // Tiếp tục với các câu hỏi khác
                         }
                     } else {
@@ -318,6 +563,7 @@ export default function TeacherAssignments() {
                             await createExamQuestion(examIdToUse, payload);
                         } catch (error) {
                             console.error('Error creating question:', error);
+                            toast.error(`Lỗi tạo câu hỏi: ${error.message}`);
                             // Tiếp tục với các câu hỏi khác
                         }
                     }
@@ -545,7 +791,19 @@ export default function TeacherAssignments() {
                         {newExam.questions.map((q, qIndex) => (
                             <div key={q.id} className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 relative group transition hover:shadow-md">
                                 <div className="flex justify-between items-start mb-4">
-                                    <span className="bg-gray-100 text-gray-600 px-3 py-1 rounded-md text-xs font-bold">Câu hỏi {qIndex + 1}</span>
+                                    <div className="flex items-center gap-3">
+                                        <span className="bg-gray-100 text-gray-600 px-3 py-1 rounded-md text-xs font-bold">Câu hỏi {qIndex + 1}</span>
+                                        <select
+                                            value={q.type || 'multiple_choice'}
+                                            onChange={(e) => handleQuestionTypeChange(qIndex, e.target.value)}
+                                            className="text-xs px-2 py-1 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-[#5a4d8c]"
+                                        >
+                                            <option value="single_choice">Single Choice</option>
+                                            <option value="multiple_choice">Multiple Choice</option>
+                                            <option value="true_false_ng">True/False/Not Given</option>
+                                            <option value="short_answer">Short Answer</option>
+                                        </select>
+                                    </div>
                                     <button 
                                         onClick={() => handleRemoveQuestion(qIndex)}
                                         className="text-gray-400 hover:text-red-500 transition p-1"
@@ -556,36 +814,184 @@ export default function TeacherAssignments() {
 
                                 {/* Nội dung câu hỏi */}
                                 <div className="mb-4">
-                                    <input 
-                                        type="text" 
-                                        className="w-full text-lg font-medium border-b border-gray-200 pb-2 focus:border-[#5a4d8c] outline-none transition placeholder-gray-300"
+                                    <textarea
+                                        className="w-full text-lg font-medium border-b border-gray-200 pb-2 focus:border-[#5a4d8c] outline-none transition placeholder-gray-300 resize-none"
                                         placeholder="Nhập nội dung câu hỏi tại đây..."
                                         value={q.text}
                                         onChange={(e) => handleQuestionChange(qIndex, 'text', e.target.value)}
+                                        rows="2"
                                     />
                                 </div>
 
-                                {/* Các đáp án */}
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    {q.options.map((opt, oIndex) => (
-                                        <div key={oIndex} className={`flex items-center gap-3 p-3 rounded-lg border ${q.correct === oIndex ? 'border-green-200 bg-green-50' : 'border-gray-100 bg-white'}`}>
-                                            <input 
-                                                type="radio" 
-                                                name={`question-${q.id}`} 
-                                                className="w-4 h-4 text-green-600 focus:ring-green-500 cursor-pointer"
-                                                checked={q.correct === oIndex}
-                                                onChange={() => handleQuestionChange(qIndex, 'correct', oIndex)}
-                                            />
-                                            <input 
-                                                type="text" 
-                                                className="flex-1 bg-transparent outline-none text-sm"
-                                                placeholder={`Đáp án ${String.fromCharCode(65 + oIndex)}`}
-                                                value={opt}
-                                                onChange={(e) => handleOptionChange(qIndex, oIndex, e.target.value)}
-                                            />
-                                        </div>
-                                    ))}
+                                {/* Media Files */}
+                                <div className="mb-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {/* Image Upload */}
+                                    <div className="space-y-2">
+                                        <label className="block text-sm font-semibold text-gray-700 flex items-center gap-2">
+                                            <Image size={16} className="text-[#5a4d8c]" />
+                                            Ảnh đính kèm
+                                        </label>
+                                        {q.imageUrl ? (
+                                            <div className="relative">
+                                                <img 
+                                                    src={q.imageUrl} 
+                                                    alt="Question" 
+                                                    className="w-full h-32 object-cover rounded-lg border border-gray-200"
+                                                />
+                                                <button
+                                                    onClick={() => handleRemoveFile(qIndex, 'image')}
+                                                    className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 transition"
+                                                >
+                                                    <X size={14} />
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <label className="flex items-center justify-center w-full h-20 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-[#5a4d8c] transition">
+                                                <div className="flex flex-col items-center gap-1">
+                                                    <Upload size={20} className="text-gray-400" />
+                                                    <span className="text-xs text-gray-500">Chọn ảnh</span>
+                                                </div>
+                                                <input
+                                                    type="file"
+                                                    accept="image/*"
+                                                    className="hidden"
+                                                    onChange={(e) => handleFileChange(qIndex, 'image', e.target.files[0])}
+                                                />
+                                            </label>
+                                        )}
+                                    </div>
+
+                                    {/* Audio Upload */}
+                                    <div className="space-y-2">
+                                        <label className="block text-sm font-semibold text-gray-700 flex items-center gap-2">
+                                            <Music size={16} className="text-[#5a4d8c]" />
+                                            Audio đính kèm
+                                        </label>
+                                        {q.audioUrl ? (
+                                            <div className="relative">
+                                                <audio controls className="w-full rounded-lg">
+                                                    <source src={q.audioUrl} />
+                                                    Your browser does not support the audio element.
+                                                </audio>
+                                                <button
+                                                    onClick={() => handleRemoveFile(qIndex, 'audio')}
+                                                    className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 transition"
+                                                >
+                                                    <X size={14} />
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <label className="flex items-center justify-center w-full h-20 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-[#5a4d8c] transition">
+                                                <div className="flex flex-col items-center gap-1">
+                                                    <Upload size={20} className="text-gray-400" />
+                                                    <span className="text-xs text-gray-500">Chọn audio</span>
+                                                </div>
+                                                <input
+                                                    type="file"
+                                                    accept="audio/*"
+                                                    className="hidden"
+                                                    onChange={(e) => handleFileChange(qIndex, 'audio', e.target.files[0])}
+                                                />
+                                            </label>
+                                        )}
+                                    </div>
                                 </div>
+
+                                {/* Các đáp án - chỉ hiển thị nếu không phải short_answer */}
+                                {q.type !== 'short_answer' && (
+                                    <div className="space-y-3">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            {q.options.map((opt, oIndex) => (
+                                                <div key={oIndex} className={`flex items-center gap-3 p-3 rounded-lg border ${
+                                                    (q.type === 'multiple_choice' && Array.isArray(q.correct) && q.correct.includes(oIndex)) ||
+                                                    (q.type !== 'multiple_choice' && q.correct === oIndex)
+                                                        ? 'border-green-200 bg-green-50' 
+                                                        : 'border-gray-100 bg-white'
+                                                }`}>
+                                                    {q.type === 'multiple_choice' ? (
+                                                        <input 
+                                                            type="checkbox" 
+                                                            className="w-4 h-4 text-green-600 focus:ring-green-500 cursor-pointer"
+                                                            checked={Array.isArray(q.correct) ? q.correct.includes(oIndex) : false}
+                                                            onChange={(e) => {
+                                                                const updatedQuestions = [...newExam.questions];
+                                                                const currentCorrect = Array.isArray(updatedQuestions[qIndex].correct) 
+                                                                    ? updatedQuestions[qIndex].correct 
+                                                                    : [];
+                                                                if (e.target.checked) {
+                                                                    updatedQuestions[qIndex].correct = [...currentCorrect, oIndex];
+                                                                } else {
+                                                                    updatedQuestions[qIndex].correct = currentCorrect.filter(i => i !== oIndex);
+                                                                }
+                                                                setNewExam({ ...newExam, questions: updatedQuestions });
+                                                            }}
+                                                        />
+                                                    ) : (
+                                                        <input 
+                                                            type="radio" 
+                                                            name={`question-${q.id}`} 
+                                                            className="w-4 h-4 text-green-600 focus:ring-green-500 cursor-pointer"
+                                                            checked={q.correct === oIndex}
+                                                            onChange={() => handleQuestionChange(qIndex, 'correct', oIndex)}
+                                                        />
+                                                    )}
+                                                    <input 
+                                                        type="text" 
+                                                        className="flex-1 bg-transparent outline-none text-sm"
+                                                        placeholder={`Đáp án ${String.fromCharCode(65 + oIndex)}`}
+                                                        value={opt}
+                                                        onChange={(e) => handleOptionChange(qIndex, oIndex, e.target.value)}
+                                                    />
+                                                    {q.options.length > 2 && (
+                                                        <button
+                                                            onClick={() => {
+                                                                const updatedQuestions = [...newExam.questions];
+                                                                updatedQuestions[qIndex].options = updatedQuestions[qIndex].options.filter((_, i) => i !== oIndex);
+                                                                // Adjust correct indices
+                                                                if (q.type === 'multiple_choice') {
+                                                                    updatedQuestions[qIndex].correct = Array.isArray(updatedQuestions[qIndex].correct)
+                                                                        ? updatedQuestions[qIndex].correct.filter(i => i !== oIndex).map(i => i > oIndex ? i - 1 : i)
+                                                                        : [];
+                                                                } else if (updatedQuestions[qIndex].correct === oIndex) {
+                                                                    updatedQuestions[qIndex].correct = 0;
+                                                                } else if (updatedQuestions[qIndex].correct > oIndex) {
+                                                                    updatedQuestions[qIndex].correct = updatedQuestions[qIndex].correct - 1;
+                                                                }
+                                                                setNewExam({ ...newExam, questions: updatedQuestions });
+                                                            }}
+                                                            className="text-red-400 hover:text-red-600 transition p-1"
+                                                        >
+                                                            <X size={14} />
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            ))}
+                                        </div>
+                                        {(q.type === 'multiple_choice' || q.type === 'single_choice') && (
+                                            <button
+                                                onClick={() => {
+                                                    const updatedQuestions = [...newExam.questions];
+                                                    updatedQuestions[qIndex].options.push('');
+                                                    setNewExam({ ...newExam, questions: updatedQuestions });
+                                                }}
+                                                className="flex items-center justify-center gap-2 p-3 border-2 border-dashed border-gray-300 rounded-lg text-gray-500 hover:border-[#5a4d8c] hover:text-[#5a4d8c] transition"
+                                            >
+                                                <Plus size={16} />
+                                                <span className="text-sm">Thêm đáp án</span>
+                                            </button>
+                                        )}
+                                    </div>
+                                )}
+
+                                {/* Short Answer - chỉ hiển thị gợi ý */}
+                                {q.type === 'short_answer' && (
+                                    <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                                        <p className="text-sm text-blue-700">
+                                            <strong>Gợi ý:</strong> Câu hỏi dạng Short Answer sẽ được chấm tự động dựa trên từ khóa. 
+                                            Học viên sẽ nhập câu trả lời dạng text tự do.
+                                        </p>
+                                    </div>
+                                )}
                             </div>
                         ))}
 
