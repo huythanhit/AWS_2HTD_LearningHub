@@ -23,7 +23,8 @@ const dbConfig = {
     encrypt: true,
     trustServerCertificate: true,
     enableArithAbort: true,
-    requestTimeout: 30000, // 30s timeout cho requests
+    requestTimeout: 60000, // Tăng timeout lên 60s cho Lambda VPC connection
+    connectionTimeout: 60000, // Connection timeout 60s
   }
 };
 
