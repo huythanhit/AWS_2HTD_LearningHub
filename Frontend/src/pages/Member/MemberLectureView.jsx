@@ -79,6 +79,26 @@ export default function MemberLectureView() {
           }
         }
         
+        // Đảm bảo URL được format đúng cho video streaming
+        if (finalVideoUrl) {
+          try {
+            const url = new URL(finalVideoUrl);
+            // Pathname đã được encode tự động bởi URL constructor
+            // Chỉ cần đảm bảo không có query string
+            finalVideoUrl = `${url.protocol}//${url.host}${url.pathname}`;
+            console.log("Final video URL:", finalVideoUrl);
+            console.log("Video URL details:", {
+              protocol: url.protocol,
+              host: url.host,
+              pathname: url.pathname,
+              fullUrl: finalVideoUrl,
+            });
+          } catch (err) {
+            console.error("Error parsing final URL:", err);
+            console.log("Using original URL:", finalVideoUrl);
+          }
+        }
+        
         setVideoUrl(finalVideoUrl);
       } catch (err) {
         console.error("Error fetching lecture:", err);
@@ -174,6 +194,7 @@ export default function MemberLectureView() {
                   ref={videoRef}
                   controls
                   preload="metadata"
+                  crossOrigin="anonymous"
                   className="w-full h-auto max-h-[80vh]"
                   style={{ objectFit: 'contain' }}
                   src={videoUrl}
@@ -223,18 +244,41 @@ export default function MemberLectureView() {
                           break;
                         case error.MEDIA_ERR_NETWORK:
                           errorMsg += "Lỗi mạng. Vui lòng kiểm tra kết nối.";
+                          // Có thể là CORS issue
+                          console.warn("Network error - có thể do CORS. Kiểm tra S3 CORS configuration.");
                           break;
                         case error.MEDIA_ERR_DECODE:
                           errorMsg += "Lỗi giải mã video.";
                           break;
                         case error.MEDIA_ERR_SRC_NOT_SUPPORTED:
                           errorMsg += "Định dạng video không được hỗ trợ hoặc URL không hợp lệ.";
-                          console.error("Video URL:", currentSrc?.substring(0, 200));
+                          console.error("Video URL (first 200 chars):", currentSrc?.substring(0, 200));
+                          console.error("Full video URL:", currentSrc);
+                          // Test URL accessibility
+                          fetch(currentSrc, { method: 'HEAD', mode: 'no-cors' })
+                            .then(() => console.log("URL is accessible (no-cors)"))
+                            .catch(err => console.error("URL test failed:", err));
                           break;
                         default:
                           errorMsg += error.message || "Vui lòng thử lại.";
                       }
                     }
+                    
+                    // Thêm thông tin debug
+                    console.error("Video error details:", {
+                      errorCode: error?.code,
+                      errorMessage: error?.message,
+                      networkState: video.networkState,
+                      readyState: video.readyState,
+                      src: currentSrc,
+                      videoElement: {
+                        videoWidth: video.videoWidth,
+                        videoHeight: video.videoHeight,
+                        duration: video.duration,
+                        paused: video.paused,
+                      }
+                    });
+                    
                     toast.error(errorMsg);
                     setError(errorMsg);
                   }}
