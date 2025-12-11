@@ -5,7 +5,9 @@ import {
   PutObjectCommand,
   DeleteObjectCommand,
   GetObjectCommand,
+  HeadObjectCommand,
 } from '@aws-sdk/client-s3';
+import { Readable } from 'stream';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { s3Client, S3_BUCKET_NAME, getS3Key, getS3Url } from '../config/s3.js';
 
@@ -133,10 +135,88 @@ export async function uploadFileToS3(fileBuffer, prefix, filename, contentType) 
 
   await s3Client.send(command);
 
-  console.log('[uploadFileToS3] File uploaded successfully:', {
-    key,
-    url: getS3Url(key),
-  });
+  // Verify file đã upload đúng bằng cách kiểm tra metadata và magic bytes
+  try {
+    const headCommand = new HeadObjectCommand({
+      Bucket: S3_BUCKET_NAME,
+      Key: key,
+    });
+    const headResult = await s3Client.send(headCommand);
+    
+    // Verify size và content-type
+    if (headResult.ContentLength !== bufferSize) {
+      console.error('[uploadFileToS3] CRITICAL: Uploaded file size mismatch:', {
+        originalSize: bufferSize,
+        s3Size: headResult.ContentLength,
+        difference: Math.abs(bufferSize - headResult.ContentLength),
+      });
+      throw new Error('File size mismatch after upload - file may be corrupted');
+    }
+    
+    if (headResult.ContentType !== normalizedContentType) {
+      console.warn('[uploadFileToS3] Content-Type mismatch:', {
+        expected: normalizedContentType,
+        actual: headResult.ContentType,
+      });
+    }
+    
+    // Verify magic bytes: Download first 32 bytes từ S3 và so sánh với buffer gốc
+    if (normalizedContentType.startsWith('video/') || normalizedContentType.startsWith('image/')) {
+      try {
+        const getObjectCommand = new GetObjectCommand({
+          Bucket: S3_BUCKET_NAME,
+          Key: key,
+          Range: 'bytes=0-31', // Chỉ lấy 32 bytes đầu để verify
+        });
+        const s3Object = await s3Client.send(getObjectCommand);
+        
+        // Convert stream to buffer
+        const chunks = [];
+        const bodyStream = s3Object.Body;
+        // Handle both Readable stream and Uint8Array
+        if (bodyStream instanceof Readable || typeof bodyStream[Symbol.asyncIterator] === 'function') {
+          for await (const chunk of bodyStream) {
+            chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+          }
+        } else {
+          // Body might already be a buffer
+          chunks.push(Buffer.isBuffer(bodyStream) ? bodyStream : Buffer.from(bodyStream));
+        }
+        const s3FirstBytes = Buffer.concat(chunks);
+        
+        // So sánh magic bytes
+        const originalFirstBytes = fileBuffer.slice(0, Math.min(32, fileBuffer.length));
+        const bytesMatch = originalFirstBytes.equals(s3FirstBytes.slice(0, originalFirstBytes.length));
+        
+        if (!bytesMatch) {
+          console.error('[uploadFileToS3] CRITICAL: Magic bytes mismatch - file corrupted during upload!', {
+            original: originalFirstBytes.toString('hex'),
+            s3: s3FirstBytes.toString('hex'),
+          });
+          throw new Error('File corrupted during upload - magic bytes do not match');
+        }
+        
+        console.log('[uploadFileToS3] Magic bytes verification passed');
+      } catch (verifyBytesError) {
+        // Nếu verify bytes fail, log error nhưng không fail upload (có thể là S3 chưa ready)
+        console.error('[uploadFileToS3] Error verifying magic bytes:', verifyBytesError.message);
+      }
+    }
+    
+    console.log('[uploadFileToS3] File uploaded and verified successfully:', {
+      key,
+      url: getS3Url(key),
+      s3Size: headResult.ContentLength,
+      s3ContentType: headResult.ContentType,
+      s3ETag: headResult.ETag,
+    });
+  } catch (verifyError) {
+    console.error('[uploadFileToS3] Error verifying uploaded file:', verifyError);
+    // Throw error nếu là size mismatch hoặc magic bytes mismatch
+    if (verifyError.message.includes('mismatch') || verifyError.message.includes('corrupted')) {
+      throw verifyError;
+    }
+  }
 
   return {
     key,

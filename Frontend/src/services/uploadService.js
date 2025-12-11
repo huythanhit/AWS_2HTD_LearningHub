@@ -38,20 +38,32 @@ export async function uploadLectureFile(file, courseId) {
     throw new Error(`File size exceeds limit of ${(maxSize / 1024 / 1024).toFixed(0)}MB`);
   }
 
-  // Log file info để debug
+  // Log file info để debug - đảm bảo file object đúng
   console.log('[uploadLectureFile] Uploading file:', {
     name: file.name,
     type: file.type,
     size: file.size,
     lastModified: file.lastModified,
+    isFile: file instanceof File,
+    isBlob: file instanceof Blob,
+    constructor: file.constructor.name,
     courseId: courseId,
   });
+  
+  // Validate file type cho video - đảm bảo type đúng
+  if (file.type && !file.type.startsWith('video/') && !file.type.includes('pdf')) {
+    console.warn('[uploadLectureFile] Warning: File type may not be video or PDF:', file.type);
+  }
 
-  // Tạo FormData và append file - QUAN TRỌNG: append file object trực tiếp, không modify
+  // Tạo FormData và append file - QUAN TRỌNG: 
+  // 1. Append file object trực tiếp từ input, không modify
+  // 2. Không đọc file content trước (sẽ làm corrupt binary data)
+  // 3. Để browser tự động xử lý multipart encoding
   const formData = new FormData();
   
   // Append file với tên field đúng ('file' như backend expect)
-  formData.append('file', file, file.name); // Thêm filename để đảm bảo
+  // QUAN TRỌNG: Chỉ append File object trực tiếp, KHÔNG transform hoặc read content
+  formData.append('file', file); // Không cần file.name ở đây, browser tự lấy
   formData.append('courseId', courseId);
 
   // Validate FormData có file không
@@ -60,14 +72,15 @@ export async function uploadLectureFile(file, courseId) {
   }
 
   try {
-    // Không cần set headers, interceptor sẽ tự động xử lý FormData
+    // QUAN TRỌNG: 
+    // - Không set Content-Type header (browser sẽ tự động set với boundary)
+    // - Axios sẽ tự động detect FormData và không transform data
+    // - Timeout đủ lớn cho file lớn (500MB có thể mất vài phút)
     const res = await apiClient.post('/api/upload/lecture', formData, {
-      // Đảm bảo timeout đủ lớn cho file lớn
-      timeout: 300000, // 5 phút cho file lớn
-      // Axios sẽ tự động set Content-Type với boundary cho FormData
-      headers: {
-        // KHÔNG set Content-Type ở đây, để browser tự động set với boundary
-      },
+      timeout: 600000, // 10 phút cho file lớn (an toàn hơn)
+      // KHÔNG set headers['Content-Type'] - để browser/axios tự động set
+      maxContentLength: Infinity, // Cho phép response lớn
+      maxBodyLength: Infinity, // Cho phép request body lớn
     });
 
     const result = res.data;

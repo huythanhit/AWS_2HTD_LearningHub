@@ -168,7 +168,8 @@ export default function TeacherClasses() {
         lastModified: file.lastModified,
       });
 
-      // Set file - đảm bảo không modify file object
+      // Set file - QUAN TRỌNG: giữ nguyên File object từ input, không modify
+      // Không đọc file content, không transform, chỉ lưu reference
       setSelectedFile(file);
     } else {
       setSelectedFile(null);
@@ -195,13 +196,25 @@ export default function TeacherClasses() {
     
     setUploadingFile(true);
     try {
+      // Validate file object một lần nữa trước khi upload
+      if (!(file instanceof File)) {
+        console.error('[handleFileUpload] File is not a File instance:', {
+          type: typeof file,
+          constructor: file?.constructor?.name,
+        });
+        toast.error('File không hợp lệ. Vui lòng chọn file khác.');
+        return null;
+      }
+      
       console.log('[handleFileUpload] Starting upload:', {
         fileName: file.name,
         fileSize: file.size,
         fileType: file.type,
+        isFile: file instanceof File,
         courseId: courseId,
       });
 
+      // Upload file - file object được pass trực tiếp, không modify
       const result = await uploadLectureFile(file, courseId);
       const s3Key = result?.s3Key || result?.key;
       

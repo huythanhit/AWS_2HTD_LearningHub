@@ -155,26 +155,36 @@ export const uploadLectureFile = async (req, res) => {
       });
     }
     
-    // Validate video file signature
+    // Validate video file signature - MP4 có thể có offset
     if (isVideo) {
-      const videoSignatures = {
-        'video/mp4': [0x00, 0x00, 0x00, 0x20, 0x66, 0x74, 0x79, 0x70], // ftyp
-        'video/quicktime': [0x00, 0x00, 0x00, 0x20, 0x66, 0x74, 0x79, 0x70], // ftyp
-        'video/webm': [0x1A, 0x45, 0xDF, 0xA3], // EBML
-      };
+      // MP4 có thể bắt đầu với box size (4 bytes) rồi mới đến ftyp
+      // Kiểm tra trong 12 bytes đầu để tìm ftyp
+      const mp4Signature = [0x66, 0x74, 0x79, 0x70]; // 'ftyp'
+      let foundMp4Signature = false;
       
-      const signature = Array.from(firstBytes.slice(0, 8));
-      const expectedSig = videoSignatures[req.file.mimetype];
-      
-      if (expectedSig) {
-        const isValid = expectedSig.every((byte, i) => signature[i] === byte);
-        if (!isValid && req.file.buffer.length > 8) {
-          console.warn('[uploadLectureFile] Video file signature may be invalid:', {
-            contentType: req.file.mimetype,
-            expected: expectedSig.map(b => '0x' + b.toString(16)).join(' '),
-            actual: signature.slice(0, expectedSig.length).map(b => '0x' + b.toString(16)).join(' '),
-          });
+      // Tìm 'ftyp' trong 12 bytes đầu (MP4 có thể có offset 0-8)
+      for (let i = 0; i <= 8 && i + 4 <= firstBytes.length; i++) {
+        if (firstBytes[i] === mp4Signature[0] &&
+            firstBytes[i + 1] === mp4Signature[1] &&
+            firstBytes[i + 2] === mp4Signature[2] &&
+            firstBytes[i + 3] === mp4Signature[3]) {
+          foundMp4Signature = true;
+          break;
         }
+      }
+      
+      if (!foundMp4Signature && req.file.buffer.length > 12) {
+        console.error('[uploadLectureFile] CRITICAL: Video file signature NOT FOUND - file may be corrupted!', {
+          contentType: req.file.mimetype,
+          firstBytes: Array.from(firstBytes.slice(0, 16)).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' '),
+          firstBytesHex: firstBytes.toString('hex').substring(0, 32),
+          expected: 'ftyp (66 74 79 70) somewhere in first 12 bytes',
+        });
+        return res.status(400).json({ 
+          message: 'Invalid video file: file signature not found. File may be corrupted.' 
+        });
+      } else if (foundMp4Signature) {
+        console.log('[uploadLectureFile] MP4 signature (ftyp) found - file appears valid');
       }
     }
 

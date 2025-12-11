@@ -5,19 +5,25 @@ const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
 const api = axios.create({
   baseURL: BASE_URL,
   withCredentials: false, // bật nếu backend yêu cầu cookie
-  timeout: 20000,
+  timeout: 20000, // Default timeout cho requests thông thường
+  // Cho phép body và content lớn (cần cho file upload)
+  maxContentLength: Infinity,
+  maxBodyLength: Infinity,
 });
 
 // REQUEST INTERCEPTOR
 api.interceptors.request.use((config) => {
   if (!config.headers) config.headers = {};
   
-  // Chỉ set Content-Type JSON nếu không phải FormData
-  // FormData sẽ tự động set Content-Type với boundary
+  // QUAN TRỌNG: FormData handling
+  // - Nếu là FormData: KHÔNG set Content-Type (browser/axios sẽ tự động set với boundary)
+  // - Nếu không phải FormData: set Content-Type = application/json
+  // - Việc này đảm bảo binary data không bị encode sai
   if (!(config.data instanceof FormData)) {
     config.headers["Content-Type"] = "application/json";
   }
-  // Nếu là FormData, không set Content-Type để browser tự động set với boundary
+  // Nếu là FormData, để browser tự động set Content-Type với boundary
+  // KHÔNG set Content-Type cho FormData vì sẽ làm mất boundary string
 
   // Gắn Bearer token nếu có
   const token =
@@ -28,6 +34,7 @@ api.interceptors.request.use((config) => {
   if (token) {
     config.headers["Authorization"] = `Bearer ${token}`;
   }
+  
   return config;
 });
 
