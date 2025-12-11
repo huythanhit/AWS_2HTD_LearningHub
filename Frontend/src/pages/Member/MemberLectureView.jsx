@@ -36,16 +36,9 @@ export default function MemberLectureView() {
           return;
         }
 
-        // Clean URL: Remove presigned query string nếu có (bucket đang public)
-        let finalVideoUrl = lectureData.url;
-        try {
-          const url = new URL(finalVideoUrl);
-          // Chỉ giữ lại protocol, host và pathname (loại bỏ query string)
-          finalVideoUrl = `${url.protocol}//${url.host}${url.pathname}`;
-        } catch (err) {
-          // Nếu không parse được URL, dùng nguyên bản
-          console.error("Error parsing video URL:", err);
-        }
+        // Sử dụng URL trực tiếp từ backend (bucket đang public)
+        const finalVideoUrl = lectureData.url;
+        console.log('[MemberLectureView] Video URL:', finalVideoUrl);
         
         setVideoUrl(finalVideoUrl);
       } catch (err) {
@@ -140,6 +133,7 @@ export default function MemberLectureView() {
                   ref={videoRef}
                   controls
                   preload="metadata"
+                  crossOrigin="anonymous"
                   className="w-full h-auto max-w-full max-h-[85vh]"
                   style={{ objectFit: 'contain', display: 'block' }}
                   src={videoUrl}
