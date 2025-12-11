@@ -73,19 +73,26 @@ const corsOptions = {
 // Middlewares chung
 app.use(cors(corsOptions));
 
-// JSON parser - exclude upload routes để tránh ảnh hưởng đến binary data
+// JSON parser - exclude một số upload routes (multipart/form-data) nhưng cho phép presigned URL
 // QUAN TRỌNG: Multer cần parse multipart/form-data, không được parse body trước
+// Nhưng presigned-upload-url route cần JSON parsing
 app.use((req, res, next) => {
-  // Skip JSON parsing cho upload routes (multipart/form-data)
-  // Multer sẽ tự xử lý parsing cho routes này
-  if (req.path.startsWith('/api/upload') && req.method === 'POST') {
-    // Log để debug
-    if (process.env.NODE_ENV === 'development') {
-      console.log('[app.js] Skipping JSON parser for upload route:', req.path);
-    }
+  // Các routes dùng multipart/form-data (Multer sẽ parse):
+  // - /api/upload/avatar
+  // - /api/upload/flashcard
+  // - /api/upload/image
+  const multipartRoutes = [
+    '/api/upload/avatar',
+    '/api/upload/flashcard',
+    '/api/upload/image',
+  ];
+  
+  // Skip JSON parsing cho multipart routes
+  if (req.method === 'POST' && multipartRoutes.includes(req.path)) {
     return next();
   }
-  // Chỉ parse JSON cho các routes khác
+  
+  // Parse JSON cho tất cả routes khác (bao gồm /api/upload/presigned-upload-url)
   express.json({ limit: '50mb' })(req, res, next);
 });
 

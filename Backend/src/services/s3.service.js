@@ -115,21 +115,6 @@ export async function uploadFileToS3(fileBuffer, prefix, filename, contentType) 
     }
   }
   
-  console.log('[uploadFileToS3] Uploading file:', {
-    key,
-    prefix,
-    filename,
-    contentType: normalizedContentType,
-    size: bufferSize,
-    cacheControl,
-    contentDisposition,
-    bufferInfo: {
-      isBuffer: Buffer.isBuffer(fileBuffer),
-      length: bufferSize,
-      firstBytes: firstBytes.toString('hex').substring(0, 32),
-      lastBytes: lastBytes.toString('hex').substring(0, 32),
-    },
-  });
 
   const command = new PutObjectCommand(commandParams);
 
@@ -203,13 +188,6 @@ export async function uploadFileToS3(fileBuffer, prefix, filename, contentType) 
       }
     }
     
-    console.log('[uploadFileToS3] File uploaded and verified successfully:', {
-      key,
-      url: getS3Url(key),
-      s3Size: headResult.ContentLength,
-      s3ContentType: headResult.ContentType,
-      s3ETag: headResult.ETag,
-    });
   } catch (verifyError) {
     console.error('[uploadFileToS3] Error verifying uploaded file:', verifyError);
     // Throw error nếu là size mismatch hoặc magic bytes mismatch
@@ -273,15 +251,6 @@ export async function generatePresignedUploadUrl(
   }
 
   const command = new PutObjectCommand(commandParams);
-
-  console.log('[generatePresignedUploadUrl] Generating presigned URL:', {
-    key,
-    contentType,
-    expiresIn,
-    hasCacheControl: !!commandParams.CacheControl,
-    hasContentDisposition: !!commandParams.ContentDisposition,
-  });
-
   const url = await getSignedUrl(s3Client, command, { expiresIn });
   return url;
 }
@@ -305,12 +274,6 @@ export async function generatePresignedDownloadUrl(key, expiresIn = 3600) {
   // Trim whitespace
   cleanKey = cleanKey.trim();
 
-  console.log('Generating presigned URL:', {
-    originalKey: key,
-    cleanKey: cleanKey,
-    bucket: S3_BUCKET_NAME,
-    expiresIn,
-  });
 
   try {
     const command = new GetObjectCommand({
@@ -319,7 +282,6 @@ export async function generatePresignedDownloadUrl(key, expiresIn = 3600) {
     });
 
     const url = await getSignedUrl(s3Client, command, { expiresIn });
-    console.log('Presigned URL generated successfully');
     return url;
   } catch (error) {
     console.error('Error generating presigned URL:', {
@@ -356,12 +318,6 @@ export function extractS3Key(urlOrKey) {
     
     // Decode URL encoding nếu có
     key = decodeURIComponent(key);
-    
-    console.log('[extractS3Key] Extracted:', {
-      original: urlOrKey,
-      pathname: url.pathname,
-      extracted: key,
-    });
     
     return key;
   } catch (err) {

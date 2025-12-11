@@ -20,11 +20,6 @@ export async function uploadLectureFile(file, courseId) {
 
   // Validate file object
   if (!(file instanceof File) && !(file instanceof Blob)) {
-    console.error('[uploadLectureFile] Invalid file object:', {
-      type: typeof file,
-      constructor: file?.constructor?.name,
-      file: file,
-    });
     throw new Error('Invalid file: file must be a File or Blob object');
   }
 
@@ -39,22 +34,6 @@ export async function uploadLectureFile(file, courseId) {
     throw new Error(`File size exceeds limit of ${(maxSize / 1024 / 1024).toFixed(0)}MB`);
   }
 
-  // Log file info để debug
-  console.log('[uploadLectureFile] Uploading file with presigned URL:', {
-    name: file.name,
-    type: file.type,
-    size: file.size,
-    lastModified: file.lastModified,
-    isFile: file instanceof File,
-    isBlob: file instanceof Blob,
-    constructor: file.constructor.name,
-    courseId: courseId,
-  });
-
-  // Validate file type cho video/PDF
-  if (file.type && !file.type.startsWith('video/') && !file.type.includes('pdf')) {
-    console.warn('[uploadLectureFile] Warning: File type may not be video or PDF:', file.type);
-  }
 
   try {
     // Bước 1: Lấy presigned URL từ backend
@@ -71,11 +50,6 @@ export async function uploadLectureFile(file, courseId) {
     }
 
     const { presignedUrl, s3Key, publicUrl } = presignedData;
-
-    console.log('[uploadLectureFile] Got presigned URL, uploading to S3:', {
-      s3Key,
-      expiresIn: presignedData.expiresIn,
-    });
 
     // Bước 2: Upload trực tiếp lên S3 bằng presigned URL
     // QUAN TRỌNG: 
@@ -102,12 +76,7 @@ export async function uploadLectureFile(file, courseId) {
       throw new Error(`Failed to upload to S3: ${uploadRes.status} ${uploadRes.statusText}`);
     }
 
-    console.log('[uploadLectureFile] Upload successful:', {
-      s3Key,
-      url: publicUrl,
-    });
-
-    // Bước 3: Trả về kết quả với format giống như API cũ
+    // Bước 3: Trả về kết quả
     return {
       s3Key,
       url: publicUrl,
@@ -126,104 +95,6 @@ export async function uploadLectureFile(file, courseId) {
     if (error.response?.data?.message) {
       throw new Error(error.response.data.message);
     }
-    throw error;
-  }
-}
-
-/**
- * Upload file bài giảng (DEPRECATED - sử dụng presigned URL trong uploadLectureFile)
- * Giữ lại để backward compatibility nếu cần
- * @deprecated Sử dụng uploadLectureFile với presigned URL
- */
-export async function uploadLectureFileLegacy(file, courseId) {
-  if (!file) {
-    throw new Error('File is required');
-  }
-  if (!courseId) {
-    throw new Error('courseId is required');
-  }
-
-  // Validate file object
-  if (!(file instanceof File) && !(file instanceof Blob)) {
-    console.error('[uploadLectureFile] Invalid file object:', {
-      type: typeof file,
-      constructor: file?.constructor?.name,
-      file: file,
-    });
-    throw new Error('Invalid file: file must be a File or Blob object');
-  }
-
-  // Validate file size
-  if (file.size === 0) {
-    throw new Error('File is empty');
-  }
-
-  // Validate file size limit (500MB)
-  const maxSize = 500 * 1024 * 1024; // 500MB
-  if (file.size > maxSize) {
-    throw new Error(`File size exceeds limit of ${(maxSize / 1024 / 1024).toFixed(0)}MB`);
-  }
-
-  // Log file info để debug - đảm bảo file object đúng
-  console.log('[uploadLectureFile] Uploading file:', {
-    name: file.name,
-    type: file.type,
-    size: file.size,
-    lastModified: file.lastModified,
-    isFile: file instanceof File,
-    isBlob: file instanceof Blob,
-    constructor: file.constructor.name,
-    courseId: courseId,
-  });
-  
-  // Validate file type cho video - đảm bảo type đúng
-  if (file.type && !file.type.startsWith('video/') && !file.type.includes('pdf')) {
-    console.warn('[uploadLectureFile] Warning: File type may not be video or PDF:', file.type);
-  }
-
-  // Tạo FormData và append file - QUAN TRỌNG: 
-  // 1. Append file object trực tiếp từ input, không modify
-  // 2. Không đọc file content trước (sẽ làm corrupt binary data)
-  // 3. Để browser tự động xử lý multipart encoding
-  const formData = new FormData();
-  
-  // Append file với tên field đúng ('file' như backend expect)
-  // QUAN TRỌNG: Chỉ append File object trực tiếp, KHÔNG transform hoặc read content
-  formData.append('file', file); // Không cần file.name ở đây, browser tự lấy
-  formData.append('courseId', courseId);
-
-  // Validate FormData có file không
-  if (!formData.has('file')) {
-    throw new Error('Failed to append file to FormData');
-  }
-
-  try {
-    // QUAN TRỌNG: 
-    // - Không set Content-Type header (browser sẽ tự động set với boundary)
-    // - Axios sẽ tự động detect FormData và không transform data
-    // - Timeout đủ lớn cho file lớn (500MB có thể mất vài phút)
-    const res = await apiClient.post('/api/upload/lecture', formData, {
-      timeout: 600000, // 10 phút cho file lớn (an toàn hơn)
-      // KHÔNG set headers['Content-Type'] - để browser/axios tự động set
-      maxContentLength: Infinity, // Cho phép response lớn
-      maxBodyLength: Infinity, // Cho phép request body lớn
-    });
-
-    const result = res.data;
-    if (result && result.data) {
-      console.log('[uploadLectureFile] Upload successful:', {
-        s3Key: result.data.s3Key,
-        url: result.data.url,
-      });
-      return result.data;
-    }
-    return result;
-  } catch (error) {
-    console.error('[uploadLectureFile] Upload error:', {
-      message: error.message,
-      response: error.response?.data,
-      status: error.response?.status,
-    });
     throw error;
   }
 }

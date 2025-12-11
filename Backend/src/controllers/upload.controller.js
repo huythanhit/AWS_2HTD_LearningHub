@@ -88,144 +88,6 @@ export const uploadAvatarSingle = uploadAvatarConfig.single('file');
 export const uploadMultiple = upload.array('files', 10); // Max 10 files
 
 /**
- * POST /api/upload/lecture
- * Upload file bài giảng (video, PDF, etc.)
- */
-export const uploadLectureFile = async (req, res) => {
-  try {
-    // Debug: Log request headers để kiểm tra Content-Type
-    if (process.env.NODE_ENV === 'development') {
-      console.log('[uploadLectureFile] Request headers:', {
-        'content-type': req.headers['content-type'],
-        'content-length': req.headers['content-length'],
-      });
-    }
-
-    if (!req.file) {
-      console.error('[uploadLectureFile] No file in request');
-      return res.status(400).json({ message: 'No file provided' });
-    }
-
-    const { courseId } = req.body;
-    if (!courseId) {
-      return res.status(400).json({ message: 'courseId is required' });
-    }
-
-    // Validate file buffer
-    if (!req.file.buffer || !Buffer.isBuffer(req.file.buffer)) {
-      console.error('[uploadLectureFile] Invalid file buffer:', {
-        hasBuffer: !!req.file.buffer,
-        isBuffer: req.file.buffer ? Buffer.isBuffer(req.file.buffer) : false,
-        bufferType: typeof req.file.buffer,
-      });
-      return res.status(400).json({ message: 'Invalid file: buffer is corrupted' });
-    }
-    
-    if (req.file.buffer.length === 0) {
-      console.error('[uploadLectureFile] Empty file buffer');
-      return res.status(400).json({ message: 'Invalid file: file is empty' });
-    }
-    
-    // Validate video file magic bytes để đảm bảo file không bị corrupt
-    const firstBytes = req.file.buffer.slice(0, Math.min(16, req.file.buffer.length));
-    const lastBytes = req.file.buffer.slice(Math.max(0, req.file.buffer.length - 16));
-    const isVideo = req.file.mimetype.startsWith('video/');
-    
-    // Log file info để debug
-    console.log('[uploadLectureFile] File info:', {
-      originalname: req.file.originalname,
-      mimetype: req.file.mimetype,
-      size: req.file.size,
-      bufferSize: req.file.buffer.length,
-      bufferType: Buffer.isBuffer(req.file.buffer) ? 'Buffer' : typeof req.file.buffer,
-      firstBytes: firstBytes.toString('hex').substring(0, 32),
-      lastBytes: lastBytes.toString('hex').substring(0, 32),
-      courseId,
-    });
-    
-    // Đảm bảo size khớp nhau - QUAN TRỌNG: size phải khớp chính xác
-    if (req.file.size !== req.file.buffer.length) {
-      console.error('[uploadLectureFile] CRITICAL: Size mismatch - file may be corrupted:', {
-        declaredSize: req.file.size,
-        bufferSize: req.file.buffer.length,
-        difference: Math.abs(req.file.size - req.file.buffer.length),
-      });
-      return res.status(400).json({ 
-        message: 'File upload failed: file size mismatch. Please try again.' 
-      });
-    }
-    
-    // Validate video file signature - MP4 có thể có offset
-    if (isVideo) {
-      // MP4 có thể bắt đầu với box size (4 bytes) rồi mới đến ftyp
-      // Kiểm tra trong 12 bytes đầu để tìm ftyp
-      const mp4Signature = [0x66, 0x74, 0x79, 0x70]; // 'ftyp'
-      let foundMp4Signature = false;
-      
-      // Tìm 'ftyp' trong 12 bytes đầu (MP4 có thể có offset 0-8)
-      for (let i = 0; i <= 8 && i + 4 <= firstBytes.length; i++) {
-        if (firstBytes[i] === mp4Signature[0] &&
-            firstBytes[i + 1] === mp4Signature[1] &&
-            firstBytes[i + 2] === mp4Signature[2] &&
-            firstBytes[i + 3] === mp4Signature[3]) {
-          foundMp4Signature = true;
-          break;
-        }
-      }
-      
-      if (!foundMp4Signature && req.file.buffer.length > 12) {
-        console.error('[uploadLectureFile] CRITICAL: Video file signature NOT FOUND - file may be corrupted!', {
-          contentType: req.file.mimetype,
-          firstBytes: Array.from(firstBytes.slice(0, 16)).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' '),
-          firstBytesHex: firstBytes.toString('hex').substring(0, 32),
-          expected: 'ftyp (66 74 79 70) somewhere in first 12 bytes',
-        });
-        return res.status(400).json({ 
-          message: 'Invalid video file: file signature not found. File may be corrupted.' 
-        });
-      } else if (foundMp4Signature) {
-        console.log('[uploadLectureFile] MP4 signature (ftyp) found - file appears valid');
-      }
-    }
-
-    // Validate mimetype cho video
-    if (req.file.mimetype.startsWith('video/')) {
-      console.log('[uploadLectureFile] Uploading video file');
-    }
-
-    const prefix = `lectures/${courseId}`;
-    const result = await uploadFileToS3(
-      req.file.buffer,
-      prefix,
-      req.file.originalname,
-      req.file.mimetype
-    );
-
-    console.log('[uploadLectureFile] Upload successful:', {
-      s3Key: result.key,
-      url: result.url,
-    });
-
-    return res.status(200).json({
-      message: 'File uploaded successfully',
-      data: {
-        s3Key: result.key,
-        url: result.url,
-        filename: req.file.originalname,
-        contentType: req.file.mimetype,
-        size: req.file.size,
-      },
-    });
-  } catch (err) {
-    console.error('uploadLectureFile error:', err);
-    return res.status(500).json({
-      message: 'Failed to upload file',
-      error: err.message,
-    });
-  }
-};
-
-/**
  * POST /api/upload/avatar
  * Upload avatar user
  */
@@ -450,7 +312,7 @@ export const uploadImage = async (req, res) => {
  */
 export const getPresignedUploadUrl = async (req, res) => {
   try {
-    const { filename, contentType, prefix = 'avatars', courseId, setId } = req.body;
+    const { filename, contentType, prefix = 'avatars', courseId, setId } = req.body || {};
 
     if (!filename || !contentType) {
       return res.status(400).json({
@@ -526,16 +388,6 @@ export const getPresignedUploadUrl = async (req, res) => {
       metadata.ContentDisposition = 'inline';
     }
 
-    console.log('[getPresignedUploadUrl] Generated presigned URL for upload:', {
-      s3Key,
-      contentType,
-      prefix,
-      courseId: courseId || null,
-      setId: setId || null,
-      expiresIn,
-      metadata,
-    });
-
     return res.status(200).json({
       message: 'Presigned URL generated successfully',
       data: {
@@ -581,11 +433,9 @@ export const getPresignedUrl = async (req, res) => {
     const url = await generatePresignedDownloadUrl(s3Key, expiresIn);
 
     if (!url) {
-      console.error('Failed to generate presigned URL for:', s3Key);
       return res.status(404).json({ message: 'File not found or cannot generate URL' });
     }
 
-    console.log('Presigned URL generated successfully');
     return res.status(200).json({
       url,
       expiresIn,

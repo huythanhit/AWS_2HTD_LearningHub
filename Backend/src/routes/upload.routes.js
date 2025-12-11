@@ -4,7 +4,6 @@ import {
   uploadSingle,
   uploadAvatarSingle,
   uploadMultiple,
-  uploadLectureFile,
   uploadAvatar,
   uploadFlashcardFile,
   uploadImage,
@@ -18,9 +17,6 @@ const router = Router();
 
 // Tất cả routes đều cần authentication
 router.use(authMiddleware);
-
-// Upload file bài giảng
-router.post('/lecture', uploadSingle, uploadLectureFile);
 
 // Upload avatar (dùng uploadAvatarSingle với giới hạn 5MB)
 router.post('/avatar', uploadAvatarSingle, uploadAvatar);

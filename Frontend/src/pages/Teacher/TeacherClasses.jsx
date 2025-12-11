@@ -160,15 +160,7 @@ export default function TeacherClasses() {
         return;
       }
 
-      // Log file info để debug
-      console.log('[handleFileChange] File selected:', {
-        name: file.name,
-        type: file.type,
-        size: file.size,
-        lastModified: file.lastModified,
-      });
-
-      // Set file - QUAN TRỌNG: giữ nguyên File object từ input, không modify
+      // Set file - giữ nguyên File object từ input
       // Không đọc file content, không transform, chỉ lưu reference
       setSelectedFile(file);
     } else {
@@ -179,12 +171,8 @@ export default function TeacherClasses() {
   const handleFileUpload = async (file, courseId) => {
     if (!file) return null;
     
-    // Validate file object trước khi upload
+    // Validate file object
     if (!(file instanceof File)) {
-      console.error('[handleFileUpload] Invalid file object:', {
-        type: typeof file,
-        constructor: file?.constructor?.name,
-      });
       toast.error('File không hợp lệ. Vui lòng chọn file khác.');
       return null;
     }
@@ -196,35 +184,14 @@ export default function TeacherClasses() {
     
     setUploadingFile(true);
     try {
-      // Validate file object một lần nữa trước khi upload
-      if (!(file instanceof File)) {
-        console.error('[handleFileUpload] File is not a File instance:', {
-          type: typeof file,
-          constructor: file?.constructor?.name,
-        });
-        toast.error('File không hợp lệ. Vui lòng chọn file khác.');
-        return null;
-      }
-      
-      console.log('[handleFileUpload] Starting upload:', {
-        fileName: file.name,
-        fileSize: file.size,
-        fileType: file.type,
-        isFile: file instanceof File,
-        courseId: courseId,
-      });
-
-      // Upload file - file object được pass trực tiếp, không modify
       const result = await uploadLectureFile(file, courseId);
       const s3Key = result?.s3Key || result?.key;
       
       if (!s3Key) {
-        console.error('[handleFileUpload] Upload response không có s3Key:', result);
         toast.error('Upload file thành công nhưng không nhận được S3 Key. Vui lòng thử lại.');
         return null;
       }
 
-      console.log('[handleFileUpload] Upload successful, s3Key:', s3Key);
       return s3Key;
     } catch (error) {
       console.error('[handleFileUpload] Upload error:', {
