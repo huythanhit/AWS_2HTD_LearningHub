@@ -64,9 +64,11 @@ export async function createUserWithProfile({
     userReq.input('password_hash', sql.NVarChar(sql.MAX), passwordHash || null);
     userReq.input('phone', sql.NVarChar(50), phone || null);
 
-    // chỉ cho phép 2 (Member) hoặc 3 (Teacher), còn lại fallback về Member
+    // Cho phép role_id: 2 (Member), 3 (Teacher), hoặc 4 (Admin)
+    // Admin role (4) chỉ được gán khi email đặc biệt (kiểm tra ở service layer)
+    const validRoleIds = [2, 3, 4]; // Member, Teacher, Admin
     const safeRoleId =
-      roleId && [2, 3].includes(Number(roleId)) ? Number(roleId) : MEMBER_ROLE_ID;
+      roleId && validRoleIds.includes(Number(roleId)) ? Number(roleId) : MEMBER_ROLE_ID;
 
     userReq.input('role_id', sql.SmallInt, safeRoleId);
     userReq.input('cognito_sub', sql.NVarChar(255), cognitoSub || null);
