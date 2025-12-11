@@ -110,6 +110,10 @@ export const uploadLectureFile = async (req, res) => {
       return res.status(400).json({ message: 'Invalid file: file is empty' });
     }
     
+    // Validate video file magic bytes để đảm bảo file không bị corrupt
+    const firstBytes = req.file.buffer.slice(0, Math.min(16, req.file.buffer.length));
+    const isVideo = req.file.mimetype.startsWith('video/');
+    
     // Log file info để debug
     console.log('[uploadLectureFile] File info:', {
       originalname: req.file.originalname,
@@ -117,16 +121,43 @@ export const uploadLectureFile = async (req, res) => {
       size: req.file.size,
       bufferSize: req.file.buffer.length,
       bufferType: Buffer.isBuffer(req.file.buffer) ? 'Buffer' : typeof req.file.buffer,
+      firstBytes: firstBytes.toString('hex').substring(0, 32),
       courseId,
     });
     
-    // Đảm bảo size khớp nhau
+    // Đảm bảo size khớp nhau - QUAN TRỌNG: size phải khớp chính xác
     if (req.file.size !== req.file.buffer.length) {
-      console.warn('[uploadLectureFile] Size mismatch:', {
+      console.error('[uploadLectureFile] CRITICAL: Size mismatch - file may be corrupted:', {
         declaredSize: req.file.size,
         bufferSize: req.file.buffer.length,
+        difference: Math.abs(req.file.size - req.file.buffer.length),
       });
-      // Không fail vì có thể do encoding, nhưng log để debug
+      return res.status(400).json({ 
+        message: 'File upload failed: file size mismatch. Please try again.' 
+      });
+    }
+    
+    // Validate video file signature
+    if (isVideo) {
+      const videoSignatures = {
+        'video/mp4': [0x00, 0x00, 0x00, 0x20, 0x66, 0x74, 0x79, 0x70], // ftyp
+        'video/quicktime': [0x00, 0x00, 0x00, 0x20, 0x66, 0x74, 0x79, 0x70], // ftyp
+        'video/webm': [0x1A, 0x45, 0xDF, 0xA3], // EBML
+      };
+      
+      const signature = Array.from(firstBytes.slice(0, 8));
+      const expectedSig = videoSignatures[req.file.mimetype];
+      
+      if (expectedSig) {
+        const isValid = expectedSig.every((byte, i) => signature[i] === byte);
+        if (!isValid && req.file.buffer.length > 8) {
+          console.warn('[uploadLectureFile] Video file signature may be invalid:', {
+            contentType: req.file.mimetype,
+            expected: expectedSig.map(b => '0x' + b.toString(16)).join(' '),
+            actual: signature.slice(0, expectedSig.length).map(b => '0x' + b.toString(16)).join(' '),
+          });
+        }
+      }
     }
 
     // Validate mimetype cho video

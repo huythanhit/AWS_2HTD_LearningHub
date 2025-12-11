@@ -56,16 +56,17 @@ export async function uploadFileToS3(fileBuffer, prefix, filename, contentType) 
   }
 
   // Đảm bảo buffer không bị modify - tạo copy nếu cần
-  // Trong Node.js, Buffer được pass by reference nhưng AWS SDK sẽ tự copy
-  // Tuy nhiên, để an toàn, đảm bảo không modify buffer gốc
+  // QUAN TRỌNG: Tạo một Buffer copy mới để đảm bảo không bị modify
+  // Buffer.from() tạo shallow copy, nhưng đủ để đảm bảo data integrity
+  const safeBuffer = Buffer.from(fileBuffer);
   
   const commandParams = {
     Bucket: S3_BUCKET_NAME,
     Key: key,
-    Body: fileBuffer, // AWS SDK sẽ tự xử lý buffer đúng cách
+    Body: safeBuffer, // Dùng copy để đảm bảo không bị modify
     ContentType: normalizedContentType,
-    // Đảm bảo binary data được xử lý đúng
-    // S3 tự động xử lý binary data, không cần set ContentEncoding
+    // Đảm bảo binary data được xử lý đúng - không encode
+    // Không set ContentEncoding để đảm bảo file giữ nguyên format
   };
 
   // Chỉ thêm metadata nếu có
@@ -77,9 +78,32 @@ export async function uploadFileToS3(fileBuffer, prefix, filename, contentType) 
   }
 
   // Validate buffer integrity - kiểm tra checksum đơn giản
-  const bufferSize = fileBuffer.length;
-  const firstBytes = fileBuffer.slice(0, Math.min(16, bufferSize));
-  const lastBytes = fileBuffer.slice(Math.max(0, bufferSize - 16), bufferSize);
+  const bufferSize = safeBuffer.length;
+  const firstBytes = safeBuffer.slice(0, Math.min(16, bufferSize));
+  const lastBytes = safeBuffer.slice(Math.max(0, bufferSize - 16), bufferSize);
+  
+  // Validate video file signature (magic bytes) để đảm bảo file không bị corrupt
+  if (normalizedContentType.startsWith('video/')) {
+    const videoSignatures = {
+      'video/mp4': [0x00, 0x00, 0x00, 0x20, 0x66, 0x74, 0x79, 0x70], // MP4: ftyp
+      'video/quicktime': [0x00, 0x00, 0x00, 0x20, 0x66, 0x74, 0x79, 0x70], // QuickTime: ftyp
+      'video/x-msvideo': [0x52, 0x49, 0x46, 0x46], // AVI: RIFF
+      'video/webm': [0x1A, 0x45, 0xDF, 0xA3], // WebM: EBML
+    };
+    
+    const signature = Array.from(firstBytes.slice(0, 8));
+    const isValidVideo = Object.values(videoSignatures).some(sig => 
+      sig.every((byte, i) => signature[i] === byte)
+    ) || normalizedContentType === 'video/mp4' || normalizedContentType === 'video/quicktime';
+    
+    if (!isValidVideo && bufferSize > 8) {
+      console.warn('[uploadFileToS3] Video file signature may be invalid:', {
+        contentType: normalizedContentType,
+        firstBytes: firstBytes.toString('hex'),
+        expected: videoSignatures[normalizedContentType]?.map(b => b.toString(16)).join(' '),
+      });
+    }
+  }
   
   console.log('[uploadFileToS3] Uploading file:', {
     key,
@@ -90,7 +114,7 @@ export async function uploadFileToS3(fileBuffer, prefix, filename, contentType) 
     cacheControl,
     contentDisposition,
     bufferInfo: {
-      isBuffer: Buffer.isBuffer(fileBuffer),
+      isBuffer: Buffer.isBuffer(safeBuffer),
       length: bufferSize,
       firstBytes: firstBytes.toString('hex').substring(0, 32),
       lastBytes: lastBytes.toString('hex').substring(0, 32),

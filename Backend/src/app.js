@@ -72,7 +72,15 @@ const corsOptions = {
 
 // Middlewares chung
 app.use(cors(corsOptions));
-app.use(express.json());
+
+// JSON parser - exclude upload routes để tránh ảnh hưởng đến binary data
+app.use((req, res, next) => {
+  // Skip JSON parsing cho upload routes (multipart/form-data)
+  if (req.path.startsWith('/api/upload') && req.method === 'POST') {
+    return next();
+  }
+  express.json()(req, res, next);
+});
 
 // Health check
 app.get("/api/health", (req, res) => {

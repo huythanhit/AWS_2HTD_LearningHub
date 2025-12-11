@@ -28,108 +28,27 @@ export default function MemberLectureView() {
       try {
         // Lấy chi tiết bài giảng
         const lectureData = await getLectureDetail(courseId, lectureId);
-        console.log("Lecture data:", lectureData);
         setLecture(lectureData);
 
-        // Lấy URL cho video - Backend đã trả về URL đầy đủ (giống avatar)
-        let finalVideoUrl = null;
-        
-        if (lectureData?.url) {
-          // Backend đã tạo URL đầy đủ từ s3Key bằng getS3Url()
-          finalVideoUrl = lectureData.url;
-          console.log("Using video URL from backend:", finalVideoUrl);
-        } else if (lectureData?.s3Key) {
-          // Fallback: Nếu backend chưa có URL (tương thích ngược)
-          const s3Key = lectureData.s3Key;
-          
-          if (s3Key.startsWith('http://') || s3Key.startsWith('https://')) {
-            // Đã là URL đầy đủ - clean nếu có presigned query string
-            try {
-              const url = new URL(s3Key);
-              if (url.search && url.search.includes('X-Amz-')) {
-                // Remove presigned query string, chỉ dùng public URL
-                finalVideoUrl = `${url.protocol}//${url.host}${url.pathname}`;
-                console.log("Cleaned presigned URL to public URL:", finalVideoUrl);
-              } else {
-                finalVideoUrl = s3Key;
-              }
-            } catch (err) {
-              finalVideoUrl = s3Key;
-            }
-          } else {
-            // Tạo public URL từ s3Key (giống getS3Url trong backend)
-            const cleanKey = s3Key.startsWith('/') ? s3Key.substring(1) : s3Key;
-            // Encode từng segment của key để đảm bảo URL hợp lệ
-            const encodedKey = cleanKey
-              .split('/')
-              .map(segment => encodeURIComponent(segment))
-              .join('/');
-            finalVideoUrl = `https://learninghub-app-bucket.s3.ap-southeast-1.amazonaws.com/${encodedKey}`;
-            console.log("Fallback: Generated video URL from s3Key:", finalVideoUrl);
-          }
-        } else {
-          console.error("No URL or s3Key in lecture data:", lectureData);
+        // Backend đã trả về URL đầy đủ từ s3Key bằng getS3Url()
+        if (!lectureData?.url) {
           setError("Bài giảng không có file video");
           return;
         }
-        
-        // Đảm bảo URL không có presigned query string (bucket đang public)
-        if (finalVideoUrl && finalVideoUrl.includes('X-Amz-')) {
-          try {
-            const url = new URL(finalVideoUrl);
-            finalVideoUrl = `${url.protocol}//${url.host}${url.pathname}`;
-            console.log("Removed presigned query string, using public URL:", finalVideoUrl);
-          } catch (err) {
-            console.error("Error cleaning URL:", err);
-          }
-        }
-        
-        // Đảm bảo URL được format đúng cho video streaming
-        if (finalVideoUrl) {
-          try {
-            const url = new URL(finalVideoUrl);
-            // Đảm bảo pathname được encode đúng (URL constructor tự encode, nhưng cần kiểm tra)
-            // Chỉ cần đảm bảo không có query string
-            finalVideoUrl = `${url.protocol}//${url.host}${url.pathname}`;
-            console.log("Final video URL:", finalVideoUrl);
-            console.log("Video URL details:", {
-              protocol: url.protocol,
-              host: url.host,
-              pathname: url.pathname,
-              fullUrl: finalVideoUrl,
-            });
-            
-            // Test URL accessibility với HEAD request (không block UI)
-            fetch(finalVideoUrl, { 
-              method: 'HEAD',
-              mode: 'cors',
-            })
-              .then(response => {
-                console.log("Video URL accessibility test:", {
-                  status: response.status,
-                  headers: {
-                    'content-type': response.headers.get('content-type'),
-                    'content-length': response.headers.get('content-length'),
-                    'accept-ranges': response.headers.get('accept-ranges'),
-                  },
-                });
-                if (!response.ok) {
-                  console.warn("Video URL returned non-OK status:", response.status);
-                }
-              })
-              .catch(err => {
-                console.warn("Video URL accessibility test failed (may be CORS issue):", err);
-                // Không throw error vì có thể là CORS preflight issue, video vẫn có thể play
-              });
-          } catch (err) {
-            console.error("Error parsing final URL:", err);
-            console.log("Using original URL:", finalVideoUrl);
-          }
+
+        // Clean URL: Remove presigned query string nếu có (bucket đang public)
+        let finalVideoUrl = lectureData.url;
+        try {
+          const url = new URL(finalVideoUrl);
+          // Chỉ giữ lại protocol, host và pathname (loại bỏ query string)
+          finalVideoUrl = `${url.protocol}//${url.host}${url.pathname}`;
+        } catch (err) {
+          // Nếu không parse được URL, dùng nguyên bản
+          console.error("Error parsing video URL:", err);
         }
         
         setVideoUrl(finalVideoUrl);
       } catch (err) {
-        console.error("Error fetching lecture:", err);
         setError(err?.message || "Không thể tải thông tin bài giảng.");
       } finally {
         setLoading(false);
@@ -166,13 +85,12 @@ export default function MemberLectureView() {
 
       await updateLectureProgress(courseId, lectureId, watchedSeconds, completed);
       lastProgressUpdateRef.current = watchedSeconds;
-      
-      if (completed) {
-        console.log("Lecture completed, progress updated");
-      }
     } catch (err) {
-      console.error("Error updating progress:", err);
       // Không hiển thị lỗi cho user vì đây là background update
+      // Chỉ log trong development
+      if (process.env.NODE_ENV === 'development') {
+        console.error("Error updating progress:", err);
+      }
     }
   };
 
@@ -217,14 +135,13 @@ export default function MemberLectureView() {
             </div>
 
             {videoUrl ? (
-              <div className="w-full bg-black rounded-2xl overflow-hidden" style={{ minHeight: '400px', maxHeight: '80vh' }}>
+              <div className="w-full bg-black rounded-2xl overflow-hidden flex items-center justify-center" style={{ minHeight: '300px', maxHeight: '85vh' }}>
                 <video
                   ref={videoRef}
                   controls
                   preload="metadata"
-                  crossOrigin="anonymous"
-                  className="w-full h-auto max-h-[80vh]"
-                  style={{ objectFit: 'contain' }}
+                  className="w-full h-auto max-w-full max-h-[85vh]"
+                  style={{ objectFit: 'contain', display: 'block' }}
                   src={videoUrl}
                   onError={(e) => {
                     const video = e.target;
@@ -236,33 +153,13 @@ export default function MemberLectureView() {
                     }
                     video.dataset.errorLogged = 'true';
                     
-                    console.error("Video error:", {
+                    const currentSrc = video.currentSrc || videoUrl || '';
+                    
+                    console.error("Video playback error:", {
                       code: error?.code,
                       message: error?.message,
-                      networkState: video.networkState,
-                      readyState: video.readyState,
-                      src: videoUrl?.substring(0, 100) + "...",
-                      currentSrc: video.currentSrc?.substring(0, 100) + "...",
-                      videoWidth: video.videoWidth,
-                      videoHeight: video.videoHeight,
+                      src: currentSrc.substring(0, 100),
                     });
-                    
-                    // Kiểm tra nếu URL có presigned query string (không nên có khi bucket public)
-                    const currentSrc = video.currentSrc || videoUrl;
-                    if (currentSrc && currentSrc.includes('X-Amz-')) {
-                      console.warn("Video URL contains presigned query string, cleaning it...");
-                      // Thử clean URL (remove query string) để dùng public URL
-                      try {
-                        const url = new URL(currentSrc);
-                        const cleanUrl = `${url.protocol}//${url.host}${url.pathname}`;
-                        console.log("Trying clean public URL:", cleanUrl);
-                        video.src = cleanUrl;
-                        video.dataset.errorLogged = 'false'; // Reset để log lại nếu vẫn lỗi
-                        return;
-                      } catch (urlErr) {
-                        console.error("Error cleaning URL:", urlErr);
-                      }
-                    }
                     
                     let errorMsg = "Không thể phát video. ";
                     if (error) {
@@ -271,110 +168,65 @@ export default function MemberLectureView() {
                           errorMsg += "Video bị hủy.";
                           break;
                         case error.MEDIA_ERR_NETWORK:
-                          errorMsg += "Lỗi mạng hoặc CORS. Vui lòng kiểm tra kết nối và cấu hình S3 CORS.";
-                          // Có thể là CORS issue - cần HEAD method và Accept-Ranges header
-                          console.warn("Network error - có thể do CORS. Kiểm tra S3 CORS configuration:");
-                          console.warn("  - CORS phải có HEAD method");
-                          console.warn("  - CORS phải expose Accept-Ranges và Content-Range headers");
-                          console.warn("  - Video URL:", currentSrc);
+                          errorMsg += "Lỗi mạng. Vui lòng kiểm tra kết nối.";
                           break;
                         case error.MEDIA_ERR_DECODE:
                           errorMsg += "Lỗi giải mã video.";
                           break;
                         case error.MEDIA_ERR_SRC_NOT_SUPPORTED:
                           errorMsg += "Định dạng video không được hỗ trợ hoặc URL không hợp lệ.";
-                          console.error("Video URL (first 200 chars):", currentSrc?.substring(0, 200));
-                          console.error("Full video URL:", currentSrc);
-                          // Test URL accessibility
-                          fetch(currentSrc, { method: 'HEAD', mode: 'no-cors' })
-                            .then(() => console.log("URL is accessible (no-cors)"))
-                            .catch(err => console.error("URL test failed:", err));
                           break;
                         default:
                           errorMsg += error.message || "Vui lòng thử lại.";
                       }
                     }
                     
-                    // Thêm thông tin debug
-                    console.error("Video error details:", {
-                      errorCode: error?.code,
-                      errorMessage: error?.message,
-                      networkState: video.networkState,
-                      readyState: video.readyState,
-                      src: currentSrc,
-                      videoElement: {
-                        videoWidth: video.videoWidth,
-                        videoHeight: video.videoHeight,
-                        duration: video.duration,
-                        paused: video.paused,
-                      }
-                    });
-                    
                     toast.error(errorMsg);
                     setError(errorMsg);
                   }}
-                  onLoadStart={() => {
-                    console.log("Video load started, URL:", videoUrl.substring(0, 100));
-                  }}
-                  onCanPlay={() => {
-                    console.log("Video can play");
-                    if (videoRef.current) {
-                      console.log("Video dimensions:", {
-                        width: videoRef.current.videoWidth,
-                        height: videoRef.current.videoHeight,
-                        aspectRatio: videoRef.current.videoWidth / videoRef.current.videoHeight,
-                      });
-                    }
-                  }}
-                  onLoadedData={() => {
-                    console.log("Video data loaded");
-                  }}
                   onLoadedMetadata={() => {
-                    console.log("Video metadata loaded");
-                    if (videoRef.current) {
-                      console.log("Video metadata:", {
-                        duration: videoRef.current.duration,
-                        videoWidth: videoRef.current.videoWidth,
-                        videoHeight: videoRef.current.videoHeight,
-                        aspectRatio: videoRef.current.videoWidth / videoRef.current.videoHeight,
+                    if (videoRef.current && videoRef.current.duration) {
+                      console.log("Video loaded:", {
+                        duration: Math.floor(videoRef.current.duration),
+                        dimensions: `${videoRef.current.videoWidth}x${videoRef.current.videoHeight}`,
                       });
                     }
                   }}
                   onTimeUpdate={(e) => {
                     const video = e.target;
+                    if (!video.duration || isNaN(video.duration) || !video.currentTime) return;
+                    
                     const currentTime = Math.floor(video.currentTime);
-                    const duration = video.duration;
+                    const duration = Math.floor(video.duration);
                     
                     // Cập nhật tiến độ mỗi 10 giây hoặc khi gần hết video
-                    if (duration && (currentTime % 10 === 0 || currentTime >= duration - 2)) {
+                    if (currentTime % 10 === 0 || currentTime >= duration - 2) {
                       handleUpdateProgress(currentTime, false);
                     }
                   }}
                   onEnded={(e) => {
                     const video = e.target;
-                    const duration = Math.floor(video.duration || 0);
-                    console.log("Video ended, marking as completed");
-                    // Đánh dấu bài giảng đã hoàn thành
-                    handleUpdateProgress(duration, true);
-                    toast.success("Bạn đã hoàn thành bài giảng này!");
+                    if (video.duration && !isNaN(video.duration)) {
+                      const duration = Math.floor(video.duration);
+                      handleUpdateProgress(duration, true);
+                      toast.success("Bạn đã hoàn thành bài giảng này!");
+                    }
                   }}
                   onPlay={() => {
-                    console.log("Video started playing");
                     // Bắt đầu cập nhật tiến độ định kỳ
                     if (progressUpdateIntervalRef.current) {
                       clearInterval(progressUpdateIntervalRef.current);
                     }
                     progressUpdateIntervalRef.current = setInterval(() => {
-                      if (videoRef.current && !videoRef.current.paused) {
+                      if (videoRef.current && !videoRef.current.paused && videoRef.current.currentTime) {
                         const currentTime = Math.floor(videoRef.current.currentTime);
                         handleUpdateProgress(currentTime, false);
                       }
                     }, 10000); // Cập nhật mỗi 10 giây
                   }}
                   onPause={() => {
-                    console.log("Video paused");
                     // Cập nhật tiến độ khi pause
-                    if (videoRef.current) {
+                    if (videoRef.current && videoRef.current.currentTime) {
                       const currentTime = Math.floor(videoRef.current.currentTime);
                       handleUpdateProgress(currentTime, false);
                     }
@@ -384,7 +236,7 @@ export default function MemberLectureView() {
                 </video>
               </div>
             ) : (
-              <div className="w-full aspect-video bg-gray-100 rounded-2xl flex items-center justify-center">
+              <div className="w-full bg-gray-100 rounded-2xl flex items-center justify-center" style={{ minHeight: '300px', maxHeight: '85vh' }}>
                 <div className="text-center">
                   <Play size={48} className="text-gray-400 mx-auto mb-2" />
                   <p className="text-gray-500">Đang tải video...</p>
