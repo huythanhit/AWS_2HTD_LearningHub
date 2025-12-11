@@ -137,25 +137,88 @@ export default function TeacherClasses() {
   const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (file) {
+      // Validate file object
+      if (!(file instanceof File)) {
+        console.error('[handleFileChange] Invalid file object:', {
+          type: typeof file,
+          constructor: file?.constructor?.name,
+        });
+        toast.error('File không hợp lệ. Vui lòng chọn file khác.');
+        return;
+      }
+
+      // Validate file size
+      if (file.size === 0) {
+        toast.error('File rỗng. Vui lòng chọn file khác.');
+        return;
+      }
+
+      // Validate file size limit (500MB)
+      const maxSize = 500 * 1024 * 1024; // 500MB
+      if (file.size > maxSize) {
+        toast.error(`File quá lớn. Kích thước tối đa là ${(maxSize / 1024 / 1024).toFixed(0)}MB.`);
+        return;
+      }
+
+      // Log file info để debug
+      console.log('[handleFileChange] File selected:', {
+        name: file.name,
+        type: file.type,
+        size: file.size,
+        lastModified: file.lastModified,
+      });
+
+      // Set file - đảm bảo không modify file object
       setSelectedFile(file);
+    } else {
+      setSelectedFile(null);
     }
   };
 
   const handleFileUpload = async (file, courseId) => {
     if (!file) return null;
     
+    // Validate file object trước khi upload
+    if (!(file instanceof File)) {
+      console.error('[handleFileUpload] Invalid file object:', {
+        type: typeof file,
+        constructor: file?.constructor?.name,
+      });
+      toast.error('File không hợp lệ. Vui lòng chọn file khác.');
+      return null;
+    }
+
+    if (file.size === 0) {
+      toast.error('File rỗng. Vui lòng chọn file khác.');
+      return null;
+    }
+    
     setUploadingFile(true);
     try {
+      console.log('[handleFileUpload] Starting upload:', {
+        fileName: file.name,
+        fileSize: file.size,
+        fileType: file.type,
+        courseId: courseId,
+      });
+
       const result = await uploadLectureFile(file, courseId);
       const s3Key = result?.s3Key || result?.key;
+      
       if (!s3Key) {
-        console.error('Upload response không có s3Key:', result);
+        console.error('[handleFileUpload] Upload response không có s3Key:', result);
         toast.error('Upload file thành công nhưng không nhận được S3 Key. Vui lòng thử lại.');
         return null;
       }
+
+      console.log('[handleFileUpload] Upload successful, s3Key:', s3Key);
       return s3Key;
     } catch (error) {
-      console.error('Upload file error:', error);
+      console.error('[handleFileUpload] Upload error:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status,
+      });
       const errorMessage = error.response?.data?.message || error.message || 'Upload file thất bại';
       toast.error(errorMessage);
       return null;
