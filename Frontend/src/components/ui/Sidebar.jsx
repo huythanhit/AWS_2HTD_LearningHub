@@ -31,7 +31,7 @@ export const memberMenuItems = [
 export const teacherMenuItems = [
     { label: 'Tổng quan', to: '/teacher', icon: LayoutDashboard },
     { label: 'Quản lý Lớp học', to: '/teacher/classes', icon: Users },
-    // { label: 'Quản lý Bài tập', to: '/teacher/assignments', icon: FileText },
+     { label: 'Quản lý Bài tập', to: '/teacher/assignments', icon: FileText },
     { label: 'Bài tập Flashcard', to: '/teacher/quiz', icon: Brain },
     { label: 'Thông báo', to: '/teacher/notifications', icon: Bell },
     { label: 'Cài đặt', to: '/teacher/settings', icon: Settings },
