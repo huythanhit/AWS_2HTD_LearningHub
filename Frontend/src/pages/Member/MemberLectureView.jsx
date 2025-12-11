@@ -32,42 +32,30 @@ export default function MemberLectureView() {
         console.log("Lecture data:", lectureData);
         setLecture(lectureData);
 
-        // Lấy URL cho video - ưu tiên dùng public URL vì bucket đã public
-        if (lectureData?.s3Key) {
-          try {
-            console.log("Getting URL for s3Key:", lectureData.s3Key);
-            
-            const s3Key = lectureData.s3Key;
-            let videoUrlToUse = null;
-            
-            // Nếu s3Key đã là URL đầy đủ thì dùng trực tiếp
-            if (s3Key.startsWith('http://') || s3Key.startsWith('https://')) {
-              console.log("Using s3Key as direct URL");
-              videoUrlToUse = s3Key;
-            } else {
-              // Tạo public URL từ s3Key
-              // Format: https://bucket-name.s3.region.amazonaws.com/key
-              // Không encode vì S3 public URLs không cần encode khi bucket đã public
-              videoUrlToUse = `https://learninghub-app-bucket.s3.ap-southeast-1.amazonaws.com/${s3Key}`;
-              console.log("Using public URL:", videoUrlToUse);
-              console.log("Original s3Key:", s3Key);
-            }
-            
-            // Set video URL trực tiếp
-            setVideoUrl(videoUrlToUse);
-          } catch (urlError) {
-            console.error("Error getting video URL:", urlError);
-            console.error("Error details:", {
-              message: urlError?.message,
-              response: urlError?.response?.data,
-              status: urlError?.response?.status,
-            });
-            const errorMessage = urlError?.message || "Không thể tải video";
-            toast.error(errorMessage);
-            setError(errorMessage);
+        // Lấy URL cho video - Backend đã trả về URL đầy đủ (giống avatar)
+        if (lectureData?.url) {
+          // Backend đã tạo URL đầy đủ từ s3Key bằng getS3Url(), dùng trực tiếp
+          console.log("Using video URL from backend:", lectureData.url);
+          setVideoUrl(lectureData.url);
+        } else if (lectureData?.s3Key) {
+          // Fallback: Nếu backend chưa có URL (tương thích ngược)
+          // Tạo URL tương tự như backend getS3Url()
+          const s3Key = lectureData.s3Key;
+          let videoUrlToUse = null;
+          
+          if (s3Key.startsWith('http://') || s3Key.startsWith('https://')) {
+            // Đã là URL đầy đủ
+            videoUrlToUse = s3Key;
+          } else {
+            // Tạo public URL từ s3Key (giống getS3Url trong backend)
+            const cleanKey = s3Key.startsWith('/') ? s3Key.substring(1) : s3Key;
+            videoUrlToUse = `https://learninghub-app-bucket.s3.ap-southeast-1.amazonaws.com/${cleanKey}`;
           }
+          
+          console.log("Fallback: Generated video URL from s3Key:", videoUrlToUse);
+          setVideoUrl(videoUrlToUse);
         } else {
-          console.error("No s3Key in lecture data:", lectureData);
+          console.error("No URL or s3Key in lecture data:", lectureData);
           setError("Bài giảng không có file video");
         }
       } catch (err) {

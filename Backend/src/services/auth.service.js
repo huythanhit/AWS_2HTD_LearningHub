@@ -89,7 +89,7 @@ export async function register({ email, password, fullName, phone, role }) {
     console.log(`[Register] Admin email detected: ${email}. Assigning Admin role.`);
   } else {
     // Xử lý role FE gửi lên (member hoặc teacher)
-    const normalizedRoleKey = (role || "").toLowerCase(); // "member" | "teacher"
+  const normalizedRoleKey = (role || "").toLowerCase(); // "member" | "teacher"
     desiredRoleId = ROLE_KEY_TO_ID[normalizedRoleKey] ?? 2; // default Member nếu gửi bậy
   }
 
@@ -255,7 +255,7 @@ export async function login({ email, password }) {
       );
       e.statusCode = 500;
       e.originalError = syncErr.message;
-      throw e;
+    throw e;
     }
   } else {
     // User đã tồn tại: Kiểm tra và sync cognito_sub nếu chưa có

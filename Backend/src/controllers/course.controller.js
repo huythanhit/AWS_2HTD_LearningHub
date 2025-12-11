@@ -23,6 +23,7 @@ import {
   getLectureDetailService,
   isUserEnrolledInCourseService,
 } from "../services/course.service.js";
+import { getS3Url } from "../config/s3.js";
 
 // ===== Helpers: lấy userId & roleId từ req.user =====
 // auth.middleware.js đang set: { sub, email, groups, roleName, roleId, localUserId, ... }
@@ -629,6 +630,15 @@ export const getLectureDetail = async (req, res) => {
     if (!lecture) {
       return res.status(404).json({
         message: "Lecture not found or not published",
+      });
+    }
+
+    // Tạo public URL cho video nếu có s3Key (giống avatar)
+    if (lecture.s3Key) {
+      lecture.url = getS3Url(lecture.s3Key);
+      console.log('[getLectureDetail] Video URL generated:', {
+        s3Key: lecture.s3Key,
+        url: lecture.url,
       });
     }
 
