@@ -135,9 +135,22 @@ export const uploadAvatar = async (req, res) => {
     });
   } catch (err) {
     console.error('uploadAvatar error:', err);
+    
+    // Provide more helpful error messages for common AWS errors
+    let errorMessage = err.message;
+    if (err.message?.includes('Access Key Id')) {
+      errorMessage = 'AWS credentials are invalid or missing. Please check your .env file and ensure AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY are correct.';
+    } else if (err.message?.includes('InvalidAccessKeyId')) {
+      errorMessage = 'AWS Access Key ID is invalid. Please verify your credentials in AWS IAM console.';
+    } else if (err.message?.includes('SignatureDoesNotMatch')) {
+      errorMessage = 'AWS Secret Access Key is incorrect. Please check your .env file.';
+    } else if (err.message?.includes('credentials')) {
+      errorMessage = 'AWS credentials are not configured. Please check your .env file.';
+    }
+    
     return res.status(500).json({
       message: 'Failed to upload avatar',
-      error: err.message,
+      error: errorMessage,
     });
   }
 };
@@ -243,9 +256,22 @@ export const uploadImage = async (req, res) => {
     });
   } catch (err) {
     console.error('uploadImage error:', err);
+    
+    // Provide more helpful error messages for common AWS errors
+    let errorMessage = err.message;
+    if (err.message?.includes('Access Key Id')) {
+      errorMessage = 'AWS credentials are invalid or missing. Please check your .env file and ensure AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY are correct.';
+    } else if (err.message?.includes('InvalidAccessKeyId')) {
+      errorMessage = 'AWS Access Key ID is invalid. Please verify your credentials in AWS IAM console.';
+    } else if (err.message?.includes('SignatureDoesNotMatch')) {
+      errorMessage = 'AWS Secret Access Key is incorrect. Please check your .env file.';
+    } else if (err.message?.includes('credentials')) {
+      errorMessage = 'AWS credentials are not configured. Please check your .env file.';
+    }
+    
     return res.status(500).json({
       message: 'Failed to upload image',
-      error: err.message,
+      error: errorMessage,
     });
   }
 };
