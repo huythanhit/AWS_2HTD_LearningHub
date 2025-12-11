@@ -125,7 +125,7 @@ export default function MemberTests() {
                     {/* Stats Box */}
                     <div className="flex gap-4 bg-white/60 backdrop-blur-md p-3 rounded-2xl border border-white/50 shadow-sm">
                         <div className="text-center px-2">
-                            <div className="text-2xl font-bold text-[#5a4d8c]">8.5</div>
+                            <div className="text-2xl font-bold text-[#5a4d8c]">0</div>
                             <div className="text-[10px] uppercase text-gray-500 font-bold">Điểm TB</div>
                         </div>
                         <div className="w-px bg-gray-200"></div>
